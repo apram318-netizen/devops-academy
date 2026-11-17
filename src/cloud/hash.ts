@@ -1,0 +1,6 @@
+/** SHA-256 hex digest for sync vault id (never store the raw passphrase in Firestore). */
+export async function sha256Hex(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text.trim());
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}

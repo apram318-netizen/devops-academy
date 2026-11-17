@@ -1,7 +1,16 @@
 import { createContext } from 'preact';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { DEFAULT_STATE, type Attempt, type FileRef, type State, type Submission } from './types';
+import {
+  DEFAULT_CLOUD,
+  DEFAULT_STATE,
+  type Attempt,
+  type CloudSettings,
+  type FileRef,
+  type FirebaseWebConfig,
+  type State,
+  type Submission,
+} from './types';
 import { migrateState } from './migrate';
 import {
   clearAllData,
@@ -23,8 +32,16 @@ import {
   writeFolderSync,
 } from '../storage/folder';
 import { createBackup, downloadJson, restoreBackup, type BackupPayload } from '../storage/backup';
+import {
+  connectCloud,
+  pullCloudState,
+  pullMissingFiles,
+  pushAllFiles,
+  pushCloudState,
+} from '../cloud/sync';
+import { sha256Hex } from '../cloud/hash';
 
-export type SaveStatus = 'browser' | 'folder' | 'error' | 'idle';
+export type SaveStatus = 'browser' | 'folder' | 'cloud' | 'error' | 'idle';
 
 type StoreValue = {
   state: State;
@@ -32,6 +49,7 @@ type StoreValue = {
   saveStatus: SaveStatus;
   saveError: string | null;
   folderNeedsReconnect: boolean;
+  cloudReady: boolean;
   setPrefs: (patch: Partial<State['prefs']>) => void;
   markDone: (id: string, done?: boolean) => void;
   updatePage: (id: string, patch: Partial<State['page'][string]>) => void;
@@ -45,6 +63,9 @@ type StoreValue = {
   getFile: (id: string) => Promise<Blob | null>;
   connectFolder: () => Promise<void>;
   reconnectFolder: () => Promise<void>;
+  connectCloudSync: (config: FirebaseWebConfig, syncKey: string) => Promise<void>;
+  disconnectCloudSync: () => void;
+  syncNow: () => Promise<void>;
   exportBackup: () => Promise<void>;
   importBackup: (file: File) => Promise<void>;
   resetProgress: () => Promise<void>;
@@ -53,17 +74,12 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
-function debounce<T extends (...args: never[]) => void>(fn: T, ms: number) {
-  let t: number | undefined;
-  const wrapped = (...args: Parameters<T>) => {
-    window.clearTimeout(t);
-    t = window.setTimeout(() => fn(...args), ms);
-  };
-  wrapped.flush = () => {
-    window.clearTimeout(t);
-  };
-  wrapped.cancel = () => window.clearTimeout(t);
-  return wrapped;
+function collectFileIds(state: State): string[] {
+  const ids = new Set<string>();
+  for (const sub of Object.values(state.subs)) {
+    for (const f of sub.files) ids.add(f.id);
+  }
+  return [...ids];
 }
 
 export function StoreProvider({ children }: { children: ComponentChildren }) {
@@ -72,28 +88,76 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [folderNeedsReconnect, setFolderNeedsReconnect] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
   const stateRef = useRef(state);
   const folderHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
   const folderTimer = useRef<number | undefined>(undefined);
+  const cloudTimer = useRef<number | undefined>(undefined);
+  const vaultIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  const persist = useCallback(async (next: State) => {
-    try {
-      await saveStateRecord(next);
-      setSaveError(null);
-      if (folderHandleRef.current) {
-        setSaveStatus('folder');
-      } else {
-        setSaveStatus('browser');
-      }
-    } catch (e) {
-      setSaveStatus('error');
-      setSaveError(e instanceof Error ? e.message : 'Could not save progress');
-    }
+  const persistLocal = useCallback(async (next: State) => {
+    await saveStateRecord(next);
   }, []);
+
+  const syncCloud = useCallback(async (s: State) => {
+    const cloud = s.storage.cloud;
+    if (!cloud.enabled || !cloud.config || !cloud.syncKey || !vaultIdRef.current) return;
+    const updatedAt = await pushCloudState(vaultIdRef.current, s);
+    const ids = await listFileIds();
+    const files: { id: string; blob: Blob }[] = [];
+    for (const id of ids) {
+      const blob = await loadFileBlob(id);
+      if (blob) files.push({ id, blob });
+    }
+    if (files.length) await pushAllFiles(vaultIdRef.current, files);
+    setState((prev) => ({
+      ...prev,
+      storage: {
+        ...prev.storage,
+        cloud: { ...prev.storage.cloud, lastCloudSync: updatedAt },
+      },
+    }));
+    setSaveStatus('cloud');
+    setSaveError(null);
+  }, []);
+
+  const scheduleCloudSync = useCallback(
+    (s: State) => {
+      if (!s.storage.cloud.enabled || !vaultIdRef.current) return;
+      window.clearTimeout(cloudTimer.current);
+      cloudTimer.current = window.setTimeout(() => {
+        void syncCloud(s).catch((e) => {
+          setSaveStatus('error');
+          setSaveError(e instanceof Error ? e.message : 'Cloud sync failed');
+        });
+      }, 1500);
+    },
+    [syncCloud],
+  );
+
+  const persist = useCallback(
+    async (next: State) => {
+      try {
+        await persistLocal(next);
+        setSaveError(null);
+        if (next.storage.cloud.enabled && vaultIdRef.current) {
+          setSaveStatus('cloud');
+        } else if (folderHandleRef.current) {
+          setSaveStatus('folder');
+        } else {
+          setSaveStatus('browser');
+        }
+      } catch (e) {
+        setSaveStatus('error');
+        setSaveError(e instanceof Error ? e.message : 'Could not save progress');
+      }
+    },
+    [persistLocal],
+  );
 
   const persistDebounced = useMemo(() => {
     let timer: number | undefined;
@@ -109,9 +173,13 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       window.clearTimeout(timer);
       if (latest) await persist(latest);
       else await persist(stateRef.current);
+      window.clearTimeout(cloudTimer.current);
+      if (stateRef.current.storage.cloud.enabled && vaultIdRef.current) {
+        await syncCloud(stateRef.current);
+      }
     };
     return run;
-  }, [persist]);
+  }, [persist, syncCloud]);
 
   const syncFolder = useCallback(async (s: State) => {
     const handle = folderHandleRef.current;
@@ -133,7 +201,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       ...prev,
       storage: { ...prev.storage, lastFolderSync: Date.now(), folderName: handle.name },
     }));
-    setSaveStatus('folder');
+    if (!s.storage.cloud.enabled) setSaveStatus('folder');
   }, []);
 
   const scheduleFolderSync = useCallback(
@@ -157,11 +225,83 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         stateRef.current = next;
         persistDebounced(next);
         scheduleFolderSync(next);
+        scheduleCloudSync(next);
         return next;
       });
     },
-    [persistDebounced, scheduleFolderSync],
+    [persistDebounced, scheduleFolderSync, scheduleCloudSync],
   );
+
+  const bootstrapCloud = useCallback(async (cloud: CloudSettings, local: State) => {
+    if (!cloud.enabled || !cloud.config || !cloud.syncKey) {
+      setCloudReady(false);
+      vaultIdRef.current = null;
+      return local;
+    }
+    const { uid, vaultId } = await connectCloud(cloud.config, cloud.syncKey);
+    vaultIdRef.current = vaultId;
+    setCloudReady(true);
+
+    const remote = await pullCloudState(vaultId);
+    let merged = local;
+    if (remote && remote.updatedAt > (cloud.lastCloudSync ?? 0)) {
+      // Prefer newer cloud copy when it is ahead of our last successful sync marker
+      // and also newer than local "activity" heuristic via lastCloudSync / prefs.
+      const localStamp = Math.max(
+        cloud.lastCloudSync ?? 0,
+        ...Object.values(local.done),
+        ...Object.values(local.subs).map((s) => s.modified),
+      );
+      if (remote.updatedAt >= localStamp) {
+        merged = migrateState(remote.state);
+        merged.storage = {
+          ...merged.storage,
+          cloud: {
+            ...cloud,
+            uid,
+            lastCloudSync: remote.updatedAt,
+            enabled: true,
+            config: cloud.config,
+            syncKey: cloud.syncKey,
+          },
+          persisted: local.storage.persisted,
+          folderName: local.storage.folderName,
+          lastFolderSync: local.storage.lastFolderSync,
+        };
+      }
+    }
+
+    merged.storage.cloud = {
+      ...merged.storage.cloud,
+      enabled: true,
+      config: cloud.config,
+      syncKey: cloud.syncKey,
+      uid,
+    };
+
+    const needed = collectFileIds(merged);
+    await pullMissingFiles(
+      vaultId,
+      needed,
+      async (id) => Boolean(await loadFileBlob(id)),
+      async (id, blob) => saveFileBlob(id, blob),
+    );
+
+    // Push local up if cloud empty or we kept local
+    if (!remote) {
+      const updatedAt = await pushCloudState(vaultId, merged);
+      merged.storage.cloud.lastCloudSync = updatedAt;
+      const ids = await listFileIds();
+      const files: { id: string; blob: Blob }[] = [];
+      for (const id of ids) {
+        const blob = await loadFileBlob(id);
+        if (blob) files.push({ id, blob });
+      }
+      if (files.length) await pushAllFiles(vaultId, files);
+    }
+
+    return merged;
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -186,14 +326,28 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
           }
         }
 
-        const migrated = migrateState(loaded);
+        let migrated = migrateState(loaded);
         const persisted = await requestPersistentStorage();
         const persistedFlag = await isPersisted();
         migrated.storage.persisted = persistedFlag ?? persisted;
         if (handle) migrated.storage.folderName = handle.name;
+
+        if (migrated.storage.cloud.enabled && migrated.storage.cloud.config && migrated.storage.cloud.syncKey) {
+          try {
+            migrated = await bootstrapCloud(migrated.storage.cloud, migrated);
+            setSaveStatus('cloud');
+          } catch (e) {
+            setSaveError(e instanceof Error ? e.message : 'Cloud connect failed');
+            setCloudReady(false);
+            setSaveStatus(handle ? 'folder' : 'browser');
+          }
+        } else {
+          setSaveStatus(handle && !folderNeedsReconnect ? 'folder' : 'browser');
+        }
+
         setState(migrated);
         stateRef.current = migrated;
-        setSaveStatus(handle && !folderNeedsReconnect ? 'folder' : 'browser');
+        await saveStateRecord(migrated);
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : 'Failed to load');
         setSaveStatus('error');
@@ -224,6 +378,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     saveStatus,
     saveError,
     folderNeedsReconnect,
+    cloudReady,
     setPrefs: (patch) => update((s) => ({ ...s, prefs: { ...s.prefs, ...patch } })),
     markDone: (id, done = true) =>
       update((s) => {
@@ -270,10 +425,26 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       if (file.size > 20 * 1024 * 1024) throw new Error('Each file must be 20 MB or smaller');
       const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await saveFileBlob(id, file);
+      if (vaultIdRef.current && stateRef.current.storage.cloud.enabled) {
+        try {
+          const { pushCloudFile } = await import('../cloud/sync');
+          await pushCloudFile(vaultIdRef.current, id, file);
+        } catch {
+          /* queued on next full sync */
+        }
+      }
       return { id, name: file.name, size: file.size, type: file.type || 'application/octet-stream' };
     },
     removeFile: async (id) => {
       await deleteFileBlob(id);
+      if (vaultIdRef.current) {
+        try {
+          const { deleteCloudFile } = await import('../cloud/sync');
+          await deleteCloudFile(vaultIdRef.current, id);
+        } catch {
+          /* ignore */
+        }
+      }
     },
     getFile: (id) => loadFileBlob(id),
     connectFolder: async () => {
@@ -300,6 +471,45 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         await syncFolder(stateRef.current);
       }
     },
+    connectCloudSync: async (config, syncKey) => {
+      const { uid, vaultId } = await connectCloud(config, syncKey);
+      vaultIdRef.current = vaultId;
+      setCloudReady(true);
+      const cloud: CloudSettings = {
+        enabled: true,
+        config,
+        syncKey,
+        uid,
+        lastCloudSync: stateRef.current.storage.cloud.lastCloudSync,
+      };
+      let next = {
+        ...stateRef.current,
+        storage: { ...stateRef.current.storage, cloud },
+      };
+      next = await bootstrapCloud(cloud, next);
+      setState(next);
+      stateRef.current = next;
+      await saveStateRecord(next);
+      setSaveStatus('cloud');
+      setSaveError(null);
+    },
+    disconnectCloudSync: () => {
+      vaultIdRef.current = null;
+      setCloudReady(false);
+      update((s) => ({
+        ...s,
+        storage: {
+          ...s.storage,
+          cloud: { ...DEFAULT_CLOUD, config: s.storage.cloud.config, syncKey: s.storage.cloud.syncKey },
+        },
+      }));
+      setSaveStatus(folderHandleRef.current ? 'folder' : 'browser');
+    },
+    syncNow: async () => {
+      if (!vaultIdRef.current) throw new Error('Cloud sync is not connected');
+      await persistDebounced.flush();
+      await syncCloud(stateRef.current);
+    },
     exportBackup: async () => {
       const payload = await createBackup(stateRef.current);
       downloadJson(`devops-academy-backup-${new Date().toISOString().slice(0, 10)}.json`, payload);
@@ -309,28 +519,44 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       const text = await file.text();
       const payload = JSON.parse(text) as BackupPayload;
       const restored = await restoreBackup(payload);
-      const migrated = migrateState(restored);
+      let migrated = migrateState(restored);
+      if (migrated.storage.cloud.enabled && migrated.storage.cloud.config && migrated.storage.cloud.syncKey) {
+        migrated = await bootstrapCloud(migrated.storage.cloud, migrated);
+        setSaveStatus('cloud');
+      } else {
+        setSaveStatus('browser');
+      }
       setState(migrated);
       stateRef.current = migrated;
       await saveStateRecord(migrated);
-      setSaveStatus('browser');
     },
     resetProgress: async () => {
+      const cloud = stateRef.current.storage.cloud;
       await clearAllData();
       const next = structuredClone(DEFAULT_STATE);
       next.prefs = { ...stateRef.current.prefs, lastBackup: null };
-      next.storage = { persisted: stateRef.current.storage.persisted, folderName: null, lastFolderSync: null };
+      next.storage = {
+        persisted: stateRef.current.storage.persisted,
+        folderName: null,
+        lastFolderSync: null,
+        cloud: cloud.enabled
+          ? { ...cloud, lastCloudSync: null }
+          : { ...DEFAULT_CLOUD },
+      };
       folderHandleRef.current = null;
       setState(next);
       stateRef.current = next;
       await saveStateRecord(next);
+      if (next.storage.cloud.enabled && vaultIdRef.current) {
+        await pushCloudState(vaultIdRef.current, next);
+      }
     },
     flush: async () => {
       await persistDebounced.flush();
     },
   };
 
-  void debounce;
+  void sha256Hex;
   void (null as unknown as Attempt);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

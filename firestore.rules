@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Personal vaults: any signed-in user (anonymous auth) who knows the vault id can sync.
+    // Vault ids are SHA-256 of your passphrase, so keep the passphrase private.
+    match /vaults/{vaultId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

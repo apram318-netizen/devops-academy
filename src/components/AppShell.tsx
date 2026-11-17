@@ -125,11 +125,13 @@ export function AppShell({
     (!lastBackup || Date.now() - lastBackup > 7 * 86400000);
 
   const saveLabel =
-    saveStatus === 'folder' && state.storage.folderName
-      ? `Saved to folder: ${state.storage.folderName}`
-      : saveStatus === 'error'
-        ? 'Not saving'
-        : 'Saved to this browser';
+    saveStatus === 'cloud'
+      ? 'Saved to cloud'
+      : saveStatus === 'folder' && state.storage.folderName
+        ? `Saved to folder: ${state.storage.folderName}`
+        : saveStatus === 'error'
+          ? 'Not saving'
+          : 'Saved to this browser';
 
   const shellClass = ['shell', navCollapsed ? 'shell-nav-collapsed' : '', inCourse ? 'shell-in-course' : '']
     .filter(Boolean)
@@ -249,8 +251,8 @@ export function AppShell({
             {week > 0 && route.name === 'dashboard' && (
               <div class="topbar-meta">Week {week} of 30</div>
             )}
-            {inCourse && !navCollapsed && (
-              <div class="topbar-meta">Use the left sidebar to jump weeks</div>
+            {state.storage.cloud.enabled && (
+              <div class="topbar-meta">Cloud sync on</div>
             )}
           </div>
           <div class="topbar-right">

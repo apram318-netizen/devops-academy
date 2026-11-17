@@ -42,6 +42,23 @@ export type Prefs = {
   theme: 'system' | 'light' | 'dark';
 };
 
+export type FirebaseWebConfig = {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+};
+
+export type CloudSettings = {
+  enabled: boolean;
+  config: FirebaseWebConfig | null;
+  syncKey: string;
+  lastCloudSync: number | null;
+  uid: string | null;
+};
+
 export type State = {
   schemaVersion: 1;
   prefs: Prefs;
@@ -61,7 +78,16 @@ export type State = {
     persisted: boolean | null;
     folderName: string | null;
     lastFolderSync: number | null;
+    cloud: CloudSettings;
   };
+};
+
+export const DEFAULT_CLOUD: CloudSettings = {
+  enabled: false,
+  config: null,
+  syncKey: '',
+  lastCloudSync: null,
+  uid: null,
 };
 
 export const DEFAULT_STATE: State = {
@@ -88,5 +114,6 @@ export const DEFAULT_STATE: State = {
     persisted: null,
     folderName: null,
     lastFolderSync: null,
+    cloud: { ...DEFAULT_CLOUD },
   },
 };

@@ -14,9 +14,10 @@ https://apram318-netizen.github.io/devops-academy/
 
 ## Where your data lives
 
-- **This browser:** IndexedDB database `devops-academy` (progress, answers, grades, uploaded files).
-- **Optional folder (Chrome/Edge):** Settings → “Save my progress to a folder”. Writes `progress.json` and a `files/` folder, autosaved about every 2 seconds.
-- **Manual backup:** Settings → Export backup / Import backup (one `.json` file including files as base64).
+- **Cloud (recommended):** Settings → Cloud sync with a free Firebase (Spark) project. Same Firebase config + sync passphrase on any device restores progress and files. See `firestore.rules` and `storage.rules`.
+- **This browser:** IndexedDB cache `devops-academy` for offline use.
+- **Optional folder (Chrome/Edge):** Settings → “Also save to a folder”.
+- **Manual backup:** Settings → Export backup / Import backup.
 
 ## Back up
 

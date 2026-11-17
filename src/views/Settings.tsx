@@ -1,13 +1,27 @@
 import { useRef, useState } from 'preact/hooks';
 import { useStore } from '../state/store';
 import { supportsFolderSync } from '../storage/folder';
+import { isValidFirebaseConfig } from '../cloud/types';
 import { Button, Dialog } from '../components/ui';
+import type { FirebaseWebConfig } from '../state/types';
+
+const SETUP = `1. Open https://console.firebase.google.com and create a free project (Spark plan).
+2. Add a web app → copy the firebaseConfig object.
+3. Build → Authentication → Sign-in method → enable Anonymous.
+4. Build → Firestore Database → Create database (production mode) → paste rules from firestore.rules in this repo.
+5. Build → Storage → Get started → paste rules from storage.rules.
+6. Paste the config below, choose a sync passphrase (8+ chars), and connect.
+7. On any other device or browser: open the same site, paste the same config + passphrase.`;
 
 export function Settings() {
   const {
     state,
     setPrefs,
     connectFolder,
+    connectCloudSync,
+    disconnectCloudSync,
+    syncNow,
+    cloudReady,
     exportBackup,
     importBackup,
     resetProgress,
@@ -15,11 +29,41 @@ export function Settings() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [configText, setConfigText] = useState(() =>
+    state.storage.cloud.config ? JSON.stringify(state.storage.cloud.config, null, 2) : '',
+  );
+  const [syncKey, setSyncKey] = useState(state.storage.cloud.syncKey || '');
+  const [busy, setBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+
+  const parseConfig = (): FirebaseWebConfig => {
+    let raw = configText.trim();
+    // Allow pasting the full snippet including const firebaseConfig = {...}
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) raw = match[0];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isValidFirebaseConfig(parsed)) throw new Error('Config looks incomplete. Paste the full firebaseConfig object.');
+    return parsed;
+  };
+
+  const onConnect = async () => {
+    setCloudError(null);
+    setBusy(true);
+    try {
+      const config = parseConfig();
+      await connectCloudSync(config, syncKey);
+      setToast('Cloud sync connected');
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : 'Could not connect');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div class="page reading">
       <h1 class="page-title">Settings</h1>
-      <p class="page-sub">Preferences, storage and backups stay on this device.</p>
+      <p class="page-sub">Local cache plus optional free Firebase cloud sync so you can continue on any device.</p>
 
       <section class="section">
         <h2 class="section-title">Profile</h2>
@@ -56,19 +100,78 @@ export function Settings() {
       </section>
 
       <section class="section">
-        <h2 class="section-title">Storage</h2>
+        <h2 class="section-title">Cloud sync (Firebase, free)</h2>
+        <div class="card">
+          <p style={{ marginTop: 0 }}>
+            Status:{' '}
+            {cloudReady && state.storage.cloud.enabled
+              ? `Connected${state.storage.cloud.lastCloudSync ? ` · last sync ${new Date(state.storage.cloud.lastCloudSync).toLocaleString('en-AU')}` : ''}`
+              : 'Not connected'}
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, whiteSpace: 'pre-wrap' }}>{SETUP}</p>
+
+          <div class="field">
+            <label for="fb-config">Firebase web config (JSON)</label>
+            <textarea
+              id="fb-config"
+              style={{ minHeight: 160, fontFamily: 'var(--mono)', fontSize: 13 }}
+              value={configText}
+              onInput={(e) => setConfigText((e.target as HTMLTextAreaElement).value)}
+              placeholder={'{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "...",\n  "storageBucket": "...",\n  "messagingSenderId": "...",\n  "appId": "..."\n}'}
+            />
+          </div>
+          <div class="field">
+            <label for="sync-key">Sync passphrase</label>
+            <input
+              id="sync-key"
+              type="password"
+              autoComplete="off"
+              value={syncKey}
+              onInput={(e) => setSyncKey((e.target as HTMLInputElement).value)}
+              placeholder="At least 8 characters — same on every device"
+            />
+            <div class="field-help">Anyone with this passphrase and your Firebase project can load your progress. Do not share it.</div>
+          </div>
+          {cloudError && <div class="field-error">{cloudError}</div>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button variant="primary" disabled={busy} onClick={() => void onConnect()}>
+              {busy ? 'Connecting…' : cloudReady ? 'Reconnect cloud sync' : 'Connect cloud sync'}
+            </Button>
+            {cloudReady && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    void syncNow()
+                      .then(() => setToast('Synced to cloud'))
+                      .catch((e) => setCloudError(e instanceof Error ? e.message : 'Sync failed'))
+                  }
+                >
+                  Sync now
+                </Button>
+                <Button variant="danger" onClick={() => disconnectCloudSync()}>
+                  Disconnect
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">This browser</h2>
         <div class="card">
           <p style={{ marginTop: 0 }}>
             Persistent storage:{' '}
             {state.storage.persisted === null ? 'Unknown' : state.storage.persisted ? 'Granted' : 'Not granted'}
           </p>
           <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-            Progress is stored in IndexedDB in this browser
-            {state.storage.folderName ? `, and synced to folder “${state.storage.folderName}”` : ''}.
+            A local IndexedDB cache keeps the app fast offline
+            {state.storage.folderName ? `, and folder sync uses “${state.storage.folderName}”` : ''}.
           </p>
           {supportsFolderSync() && (
             <Button variant="secondary" onClick={() => void connectFolder()}>
-              {state.storage.folderName ? 'Change folder' : 'Save my progress to a folder'}
+              {state.storage.folderName ? 'Change folder' : 'Also save to a folder'}
             </Button>
           )}
         </div>
@@ -78,10 +181,8 @@ export function Settings() {
         <h2 class="section-title">Backup</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button
-            variant="primary"
-            onClick={() =>
-              void exportBackup().then(() => setToast('Backup downloaded'))
-            }
+            variant="secondary"
+            onClick={() => void exportBackup().then(() => setToast('Backup downloaded'))}
           >
             Export backup
           </Button>
@@ -104,9 +205,7 @@ export function Settings() {
         </div>
         <p class="field-help">
           Last backup:{' '}
-          {state.prefs.lastBackup
-            ? new Date(state.prefs.lastBackup).toLocaleString('en-AU')
-            : 'Never'}
+          {state.prefs.lastBackup ? new Date(state.prefs.lastBackup).toLocaleString('en-AU') : 'Never'}
         </p>
       </section>
 
@@ -132,7 +231,7 @@ export function Settings() {
             </>
           }
         >
-          <p>This deletes completions, submissions, quiz attempts and uploaded files on this device.</p>
+          <p>This deletes completions, submissions, quiz attempts and uploaded files. Cloud sync settings are kept if connected.</p>
         </Dialog>
       )}
       {confirmReset === 2 && (
@@ -158,7 +257,7 @@ export function Settings() {
             </>
           }
         >
-          <p>This cannot be undone unless you have a backup.</p>
+          <p>This cannot be undone unless you have a backup or cloud copy.</p>
         </Dialog>
       )}
 

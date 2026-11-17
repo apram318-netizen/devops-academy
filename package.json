@@ -11,6 +11,7 @@
     "test:ui": "playwright test --ui"
   },
   "dependencies": {
+    "firebase": "^13.4.0",
     "lucide-preact": "^0.511.0",
     "preact": "^10.26.5"
   },
@@ -22,6 +23,8 @@
     "vite-plugin-singlefile": "^2.2.0"
   },
   "allowScripts": {
-    "esbuild@0.25.12": true
+    "esbuild@0.25.12": true,
+    "@firebase/util@1.15.3": true,
+    "protobufjs@7.6.6": true
   }
 }

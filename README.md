@@ -2,7 +2,11 @@
 
 A personal, offline-first learning platform for a 30-week DevOps curriculum. No server, no account, no internet required (except optional web fonts).
 
-## Open the app
+## Live site
+
+https://apram318-netizen.github.io/devops-academy/
+
+## Open the app locally
 
 1. Build once: `npm install && npm run build`
 2. Open `dist/DevOps-Academy.html` in Chrome, Edge or Firefox (double-click or File → Open).

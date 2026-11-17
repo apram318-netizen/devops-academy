@@ -5,13 +5,15 @@ import { isValidFirebaseConfig } from '../cloud/types';
 import { Button, Dialog } from '../components/ui';
 import type { FirebaseWebConfig } from '../state/types';
 
-const SETUP = `1. Open https://console.firebase.google.com and create a free project (Spark plan).
-2. Add a web app → copy the firebaseConfig object.
-3. Build → Authentication → Sign-in method → enable Anonymous.
-4. Build → Firestore Database → Create database (production mode) → paste rules from firestore.rules in this repo.
-5. Build → Storage → Get started → paste rules from storage.rules.
-6. Paste the config below, choose a sync passphrase (8+ chars), and connect.
-7. On any other device or browser: open the same site, paste the same config + passphrase.`;
+const SETUP = `1. Open https://console.firebase.google.com → create a free Spark project → add a Web app → copy firebaseConfig.
+2. Authentication → Sign-in method → enable Anonymous.
+3. Firestore → Create database (production) → paste rules from firestore.rules in this repo.
+4. Storage → Get started → paste rules from storage.rules.
+5. Lock the browser API key: Google Cloud Console → APIs & Services → Credentials → your Browser key → Application restrictions → HTTP referrers → add:
+   https://apram318-netizen.github.io/*
+   http://localhost:*
+6. Paste config below (stays in this browser only — never commit it). Choose a strong passphrase (12+ chars). Progress is encrypted with it before leaving your device.
+7. Other devices: same site + same config + same passphrase.`
 
 export function Settings() {
   const {

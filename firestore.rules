@@ -1,10 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Personal vaults: any signed-in user (anonymous auth) who knows the vault id can sync.
-    // Vault ids are SHA-256 of your passphrase, so keep the passphrase private.
+    // Encrypted vaults only. The document holds ciphertext + salt/iv — never your
+    // Firebase web config or raw passphrase. Access requires Auth (anonymous OK)
+    // and knowledge of the vault id (SHA-256 of your passphrase).
     match /vaults/{vaultId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null
+        && vaultId.matches('^[a-f0-9]{64}$');
+
+      allow create, update: if request.auth != null
+        && vaultId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['v', 'updatedAt', 'saltB64', 'ivB64', 'ciphertextB64'])
+        && request.resource.data.v == 2
+        && request.resource.data.updatedAt is int
+        && request.resource.data.saltB64 is string
+        && request.resource.data.ivB64 is string
+        && request.resource.data.ciphertextB64 is string
+        && request.resource.data.ciphertextB64.size() < 900000;
+
+      allow delete: if request.auth != null
+        && vaultId.matches('^[a-f0-9]{64}$');
     }
   }
 }

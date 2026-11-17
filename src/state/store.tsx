@@ -106,14 +106,14 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
   const syncCloud = useCallback(async (s: State) => {
     const cloud = s.storage.cloud;
     if (!cloud.enabled || !cloud.config || !cloud.syncKey || !vaultIdRef.current) return;
-    const updatedAt = await pushCloudState(vaultIdRef.current, s);
+    const updatedAt = await pushCloudState(vaultIdRef.current, s, cloud.syncKey);
     const ids = await listFileIds();
     const files: { id: string; blob: Blob }[] = [];
     for (const id of ids) {
       const blob = await loadFileBlob(id);
       if (blob) files.push({ id, blob });
     }
-    if (files.length) await pushAllFiles(vaultIdRef.current, files);
+    if (files.length) await pushAllFiles(vaultIdRef.current, files, cloud.syncKey);
     setState((prev) => ({
       ...prev,
       storage: {
@@ -242,7 +242,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     vaultIdRef.current = vaultId;
     setCloudReady(true);
 
-    const remote = await pullCloudState(vaultId);
+    const remote = await pullCloudState(vaultId, cloud.syncKey);
     let merged = local;
     if (remote && remote.updatedAt > (cloud.lastCloudSync ?? 0)) {
       // Prefer newer cloud copy when it is ahead of our last successful sync marker
@@ -283,13 +283,14 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     await pullMissingFiles(
       vaultId,
       needed,
+      cloud.syncKey,
       async (id) => Boolean(await loadFileBlob(id)),
       async (id, blob) => saveFileBlob(id, blob),
     );
 
-    // Push local up if cloud empty or we kept local
-    if (!remote) {
-      const updatedAt = await pushCloudState(vaultId, merged);
+    // Push local up if cloud empty, or upgrade a legacy plaintext vault to encrypted.
+    if (!remote || remote.legacy) {
+      const updatedAt = await pushCloudState(vaultId, merged, cloud.syncKey);
       merged.storage.cloud.lastCloudSync = updatedAt;
       const ids = await listFileIds();
       const files: { id: string; blob: Blob }[] = [];
@@ -297,7 +298,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         const blob = await loadFileBlob(id);
         if (blob) files.push({ id, blob });
       }
-      if (files.length) await pushAllFiles(vaultId, files);
+      if (files.length) await pushAllFiles(vaultId, files, cloud.syncKey);
     }
 
     return merged;
@@ -425,10 +426,11 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       if (file.size > 20 * 1024 * 1024) throw new Error('Each file must be 20 MB or smaller');
       const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await saveFileBlob(id, file);
-      if (vaultIdRef.current && stateRef.current.storage.cloud.enabled) {
+      const pass = stateRef.current.storage.cloud.syncKey;
+      if (vaultIdRef.current && stateRef.current.storage.cloud.enabled && pass) {
         try {
           const { pushCloudFile } = await import('../cloud/sync');
-          await pushCloudFile(vaultIdRef.current, id, file);
+          await pushCloudFile(vaultIdRef.current, id, file, pass);
         } catch {
           /* queued on next full sync */
         }
@@ -547,8 +549,8 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       setState(next);
       stateRef.current = next;
       await saveStateRecord(next);
-      if (next.storage.cloud.enabled && vaultIdRef.current) {
-        await pushCloudState(vaultIdRef.current, next);
+      if (next.storage.cloud.enabled && vaultIdRef.current && next.storage.cloud.syncKey) {
+        await pushCloudState(vaultIdRef.current, next, next.storage.cloud.syncKey);
       }
     },
     flush: async () => {

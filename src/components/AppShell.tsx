@@ -64,7 +64,8 @@ export function AppShell({
   route: Route;
   children: ComponentChildren;
 }) {
-  const { state, saveStatus, saveError, folderNeedsReconnect, exportBackup, reconnectFolder } = useStore();
+  const { state, saveStatus, saveError, folderNeedsReconnect, cloudReady, exportBackup, reconnectFolder } =
+    useStore();
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -121,7 +122,9 @@ export function AppShell({
 
   const saveLabel =
     saveStatus === 'cloud'
-      ? 'Saved to cloud'
+      ? cloudReady
+        ? 'Live sync on'
+        : 'Saved to cloud'
       : saveStatus === 'folder' && state.storage.folderName
         ? `Saved to folder: ${state.storage.folderName}`
         : saveStatus === 'error'

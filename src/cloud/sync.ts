@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore';
 import type { State } from '../state/types';
 import { DEFAULT_CLOUD } from '../state/types';
 import { sha256Hex } from './hash';
@@ -26,8 +26,21 @@ type LegacyVaultDoc = {
   state?: State;
 };
 
+type KeyCache = { saltB64: string; key: CryptoKey };
+
+const keyCache = new Map<string, KeyCache>();
+
 function vaultPath(vaultId: string) {
   return `vaults/${vaultId}`;
+}
+
+async function vaultKey(vaultId: string, passphrase: string, saltB64?: string): Promise<KeyCache> {
+  const cached = keyCache.get(vaultId);
+  if (cached && (!saltB64 || cached.saltB64 === saltB64)) return cached;
+  const derived = await deriveVaultKey(passphrase, saltB64 ?? cached?.saltB64);
+  const entry = { key: derived.key, saltB64: derived.saltB64 };
+  keyCache.set(vaultId, entry);
+  return entry;
 }
 
 /** Never upload Firebase config, passphrase, or file attachment blobs/metadata. */
@@ -42,7 +55,6 @@ export function scrubSecretsForCloud(state: State): State {
       uid: null,
     },
   };
-  // Submitted files stay on-device (IndexedDB / optional folder). Cloud sync is progress only.
   for (const id of Object.keys(clone.subs)) {
     const sub = clone.subs[id];
     if (sub) clone.subs[id] = { ...sub, files: [] };
@@ -61,17 +73,10 @@ export function mergeLocalFileAttachments(remote: State, local: State): State {
   return { ...remote, subs };
 }
 
-export function restoreLocalSecrets(remote: State, localCloud: CloudSettings): State {
-  return {
-    ...remote,
-    storage: {
-      ...remote.storage,
-      cloud: {
-        ...localCloud,
-        lastCloudSync: remote.storage.cloud.lastCloudSync ?? localCloud.lastCloudSync,
-      },
-    },
-  };
+export function localActivityStamp(state: State): number {
+  const doneTimes = Object.values(state.done);
+  const subTimes = Object.values(state.subs).map((s) => s.modified);
+  return Math.max(0, ...doneTimes, ...subTimes, state.storage.cloud.lastCloudSync ?? 0);
 }
 
 export async function connectCloud(
@@ -86,6 +91,28 @@ export async function connectCloud(
   return { uid, vaultId };
 }
 
+function parseVaultDoc(
+  data: EncryptedVaultDoc & LegacyVaultDoc,
+  passphrase: string,
+  vaultId: string,
+): Promise<CloudSnapshot | null> {
+  return (async () => {
+    if (data.v === 2 && data.ciphertextB64 && data.ivB64 && data.saltB64) {
+      try {
+        const { key } = await vaultKey(vaultId, passphrase, data.saltB64);
+        const state = await decryptJson<State>(key, data.ivB64, data.ciphertextB64);
+        return { updatedAt: data.updatedAt ?? 0, state };
+      } catch {
+        throw new Error('Could not decrypt cloud vault — check your passphrase');
+      }
+    }
+    if (data.state) {
+      return { updatedAt: data.updatedAt ?? 0, state: data.state, legacy: true };
+    }
+    return null;
+  })();
+}
+
 export async function pullCloudState(
   vaultId: string,
   passphrase: string,
@@ -94,22 +121,7 @@ export async function pullCloudState(
   if (!db) throw new Error('Cloud not connected');
   const snap = await getDoc(doc(db, vaultPath(vaultId)));
   if (!snap.exists()) return null;
-  const data = snap.data() as EncryptedVaultDoc & LegacyVaultDoc;
-
-  if (data.v === 2 && data.ciphertextB64 && data.ivB64 && data.saltB64) {
-    try {
-      const { key } = await deriveVaultKey(passphrase, data.saltB64);
-      const state = await decryptJson<State>(key, data.ivB64, data.ciphertextB64);
-      return { updatedAt: data.updatedAt ?? 0, state };
-    } catch {
-      throw new Error('Could not decrypt cloud vault — check your passphrase');
-    }
-  }
-
-  if (data.state) {
-    return { updatedAt: data.updatedAt ?? 0, state: data.state, legacy: true };
-  }
-  return null;
+  return parseVaultDoc(snap.data() as EncryptedVaultDoc & LegacyVaultDoc, passphrase, vaultId);
 }
 
 export async function pushCloudState(
@@ -124,7 +136,8 @@ export async function pushCloudState(
 
   const existing = await getDoc(doc(db, vaultPath(vaultId)));
   const prev = existing.exists() ? (existing.data() as EncryptedVaultDoc) : null;
-  const { key, saltB64 } = await deriveVaultKey(
+  const { key, saltB64 } = await vaultKey(
+    vaultId,
     passphrase,
     prev?.v === 2 ? prev.saltB64 : undefined,
   );
@@ -139,6 +152,36 @@ export async function pushCloudState(
   };
   await setDoc(doc(db, vaultPath(vaultId)), payload, { merge: false });
   return updatedAt;
+}
+
+/** Live updates when another device writes the vault. */
+export function subscribeVault(
+  vaultId: string,
+  passphrase: string,
+  onUpdate: (snap: CloudSnapshot) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const { db } = getFirebase();
+  if (!db) throw new Error('Cloud not connected');
+  return onSnapshot(
+    doc(db, vaultPath(vaultId)),
+    (snap) => {
+      void (async () => {
+        if (!snap.exists()) return;
+        try {
+          const parsed = await parseVaultDoc(
+            snap.data() as EncryptedVaultDoc & LegacyVaultDoc,
+            passphrase,
+            vaultId,
+          );
+          if (parsed) onUpdate(parsed);
+        } catch (e) {
+          onError?.(e instanceof Error ? e : new Error('Cloud listener failed'));
+        }
+      })();
+    },
+    (err) => onError?.(err),
+  );
 }
 
 export function cloudStatusLabel(cloud: CloudSettings): string | null {

@@ -119,11 +119,6 @@ export function AppShell({
     }));
   }, [state]);
 
-  const lastBackup = state.prefs.lastBackup ?? state.storage.lastFolderSync;
-  const needsBackup =
-    Object.keys(state.done).length + Object.keys(state.subs).length > 0 &&
-    (!lastBackup || Date.now() - lastBackup > 7 * 86400000);
-
   const saveLabel =
     saveStatus === 'cloud'
       ? 'Saved to cloud'
@@ -315,15 +310,6 @@ export function AppShell({
             </button>
           </div>
         )}
-        {needsBackup && !saveError && (
-          <div class="banner banner-warning">
-            It has been over 7 days since your last backup.
-            <button type="button" class="btn btn-ghost" style={{ height: 28, color: 'inherit' }} onClick={() => void exportBackup()}>
-              Export backup
-            </button>
-          </div>
-        )}
-
         <div class="shell-body">
           <main class="shell-content">{children}</main>
         </div>

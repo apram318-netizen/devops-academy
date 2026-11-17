@@ -21,7 +21,7 @@ https://apram318-netizen.github.io/devops-academy/
 
 ## Back up
 
-Export a backup from Settings at least weekly. If folder sync or a backup is older than 7 days and you have progress, a reminder banner appears.
+With cloud sync on, progress syncs automatically. Optional: Settings → Export / Import backup (includes local files), or folder sync.
 
 ## Update the app
 

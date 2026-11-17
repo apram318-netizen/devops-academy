@@ -1,0 +1,27 @@
+{
+  "name": "devops-academy",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node scripts/rename-html.mjs && mkdir -p docs && cp dist/DevOps-Academy.html docs/index.html",
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "lucide-preact": "^0.511.0",
+    "preact": "^10.26.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@preact/preset-vite": "^2.10.1",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-singlefile": "^2.2.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

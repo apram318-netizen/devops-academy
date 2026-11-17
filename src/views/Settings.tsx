@@ -2,18 +2,20 @@ import { useRef, useState } from 'preact/hooks';
 import { useStore } from '../state/store';
 import { supportsFolderSync } from '../storage/folder';
 import { isValidFirebaseConfig } from '../cloud/types';
+import { BUILT_IN_FIREBASE_CONFIG } from '../cloud/projectConfig';
 import { Button, Dialog } from '../components/ui';
 import type { FirebaseWebConfig } from '../state/types';
 
-const SETUP = `1. Open https://console.firebase.google.com → create a free Spark project → add a Web app → copy firebaseConfig.
-2. Authentication → Sign-in method → enable Anonymous.
-3. Firestore → Create database (production) → paste rules from firestore.rules in this repo.
-4. Storage → Get started → paste rules from storage.rules.
-5. Lock the browser API key: Google Cloud Console → APIs & Services → Credentials → your Browser key → Application restrictions → HTTP referrers → add:
+const SETUP = `Firebase project is already wired for this site (devops-course-7e346).
+
+Before first connect, finish console setup once:
+1. Authentication → enable Anonymous sign-in
+2. Paste firestore.rules and storage.rules from the repo into Firestore + Storage
+3. Lock the Browser API key referrers to:
    https://apram318-netizen.github.io/*
    http://localhost:*
-6. Paste config below (stays in this browser only — never commit it). Choose a strong passphrase (12+ chars). Progress is encrypted with it before leaving your device.
-7. Other devices: same site + same config + same passphrase.`
+
+Then enter your sync passphrase below and connect. The passphrase stays in this browser only (never in GitHub). Use the same passphrase on every device.`;
 
 export function Settings() {
   const {
@@ -31,16 +33,17 @@ export function Settings() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [configText, setConfigText] = useState(() =>
-    state.storage.cloud.config ? JSON.stringify(state.storage.cloud.config, null, 2) : '',
+    JSON.stringify(state.storage.cloud.config ?? BUILT_IN_FIREBASE_CONFIG, null, 2),
   );
   const [syncKey, setSyncKey] = useState(state.storage.cloud.syncKey || '');
   const [busy, setBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
 
   const parseConfig = (): FirebaseWebConfig => {
+    if (!showAdvanced) return BUILT_IN_FIREBASE_CONFIG;
     let raw = configText.trim();
-    // Allow pasting the full snippet including const firebaseConfig = {...}
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) raw = match[0];
     const parsed = JSON.parse(raw) as unknown;
@@ -112,16 +115,9 @@ export function Settings() {
           </p>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, whiteSpace: 'pre-wrap' }}>{SETUP}</p>
 
-          <div class="field">
-            <label for="fb-config">Firebase web config (JSON)</label>
-            <textarea
-              id="fb-config"
-              style={{ minHeight: 160, fontFamily: 'var(--mono)', fontSize: 13 }}
-              value={configText}
-              onInput={(e) => setConfigText((e.target as HTMLTextAreaElement).value)}
-              placeholder={'{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "...",\n  "storageBucket": "...",\n  "messagingSenderId": "...",\n  "appId": "..."\n}'}
-            />
-          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+            Project: <code>{BUILT_IN_FIREBASE_CONFIG.projectId}</code> (built into the live site)
+          </p>
           <div class="field">
             <label for="sync-key">Sync passphrase</label>
             <input
@@ -130,10 +126,31 @@ export function Settings() {
               autoComplete="off"
               value={syncKey}
               onInput={(e) => setSyncKey((e.target as HTMLInputElement).value)}
-              placeholder="At least 8 characters — same on every device"
+              placeholder="12+ characters — same on every device"
             />
-            <div class="field-help">Anyone with this passphrase and your Firebase project can load your progress. Do not share it.</div>
+            <div class="field-help">
+              This encrypts your vault. It is stored only in this browser after you connect — never commit it to
+              GitHub. Anyone who knows it can load your progress.
+            </div>
           </div>
+          <details
+            open={showAdvanced}
+            onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+            style={{ marginBottom: 12 }}
+          >
+            <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}>
+              Advanced: override Firebase web config
+            </summary>
+            <div class="field" style={{ marginTop: 8 }}>
+              <label for="fb-config">Firebase web config (JSON)</label>
+              <textarea
+                id="fb-config"
+                style={{ minHeight: 140, fontFamily: 'var(--mono)', fontSize: 13 }}
+                value={configText}
+                onInput={(e) => setConfigText((e.target as HTMLTextAreaElement).value)}
+              />
+            </div>
+          </details>
           {cloudError && <div class="field-error">{cloudError}</div>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button variant="primary" disabled={busy} onClick={() => void onConnect()}>

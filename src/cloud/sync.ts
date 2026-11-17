@@ -43,11 +43,17 @@ async function vaultKey(vaultId: string, passphrase: string, saltB64?: string): 
   return entry;
 }
 
-/** Never upload Firebase config, passphrase, or file attachment blobs/metadata. */
+/**
+ * Full learner progress goes to Firestore (encrypted): prefs, done, pages, steps,
+ * submissions (incl. text/grades/file metadata), quizzes, UI. Only strip secrets —
+ * never the sync passphrase or Firebase web config. File *bytes* stay in IndexedDB.
+ */
 export function scrubSecretsForCloud(state: State): State {
   const clone = structuredClone(state);
   clone.storage = {
     ...clone.storage,
+    folderName: null,
+    lastFolderSync: null,
     cloud: {
       ...DEFAULT_CLOUD,
       enabled: true,
@@ -55,29 +61,10 @@ export function scrubSecretsForCloud(state: State): State {
       uid: null,
     },
   };
-  for (const id of Object.keys(clone.subs)) {
-    const sub = clone.subs[id];
-    if (sub) clone.subs[id] = { ...sub, files: [] };
-  }
   return clone;
 }
 
-/** After a cloud pull, keep any file attachments that only exist on this device. */
-export function mergeLocalFileAttachments(remote: State, local: State): State {
-  const subs = { ...remote.subs };
-  for (const [id, localSub] of Object.entries(local.subs)) {
-    if (!localSub.files?.length) continue;
-    const remoteSub = subs[id];
-    subs[id] = remoteSub ? { ...remoteSub, files: localSub.files } : localSub;
-  }
-  return { ...remote, subs };
-}
-
-export function localActivityStamp(state: State): number {
-  const doneTimes = Object.values(state.done);
-  const subTimes = Object.values(state.subs).map((s) => s.modified);
-  return Math.max(0, ...doneTimes, ...subTimes, state.storage.cloud.lastCloudSync ?? 0);
-}
+export { mergeProgressStates, progressFingerprint } from './merge';
 
 export async function connectCloud(
   config: FirebaseWebConfig,

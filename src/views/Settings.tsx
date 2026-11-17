@@ -8,7 +8,7 @@ import type { FirebaseWebConfig } from '../state/types';
 
 const SETUP = `Firebase project is already wired for this site (devops-course-7e346).
 
-Cloud sync covers progress only (weeks done, notes, quiz/assignment text). Submitted files stay on this device (IndexedDB; optional folder backup).
+Cloud sync stores every progress change in Firestore (completions, notes, lab steps, quizzes, assignment text/grades, UI). File bytes stay on this device; file names still sync with the submission.
 
 Before first connect, finish console setup once:
 1. Authentication → enable Anonymous sign-in

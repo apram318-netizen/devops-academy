@@ -34,8 +34,8 @@ import {
 import { createBackup, downloadJson, restoreBackup, type BackupPayload } from '../storage/backup';
 import {
   connectCloud,
-  localActivityStamp,
-  mergeLocalFileAttachments,
+  mergeProgressStates,
+  progressFingerprint,
   pullCloudState,
   pushCloudState,
   subscribeVault,
@@ -91,6 +91,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
   const vaultUnsubRef = useRef<Unsubscribe | null>(null);
   const applyingRemoteRef = useRef(false);
   const lastSeenRemoteAt = useRef(0);
+  const scheduleCloudSyncRef = useRef<(s: State) => void>(() => {});
 
   useEffect(() => {
     stateRef.current = state;
@@ -105,40 +106,80 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     vaultUnsubRef.current = null;
   }, []);
 
-  const applyRemoteSnapshot = useCallback(
-    async (remoteUpdatedAt: number, remoteState: State) => {
-      if (remoteUpdatedAt <= lastSeenRemoteAt.current) return;
-      if (remoteUpdatedAt <= (stateRef.current.storage.cloud.lastCloudSync ?? 0)) return;
-
-      lastSeenRemoteAt.current = remoteUpdatedAt;
-      applyingRemoteRef.current = true;
-      const cloud = stateRef.current.storage.cloud;
-      let next = mergeLocalFileAttachments(migrateState(remoteState), stateRef.current);
-      next = {
-        ...next,
+  const syncCloud = useCallback(async (s: State) => {
+    const cloud = s.storage.cloud;
+    if (!cloud.enabled || !cloud.config || !cloud.syncKey || !vaultIdRef.current) return;
+    if (applyingRemoteRef.current) return;
+    const updatedAt = await pushCloudState(vaultIdRef.current, s, cloud.syncKey);
+    lastSeenRemoteAt.current = Math.max(lastSeenRemoteAt.current, updatedAt);
+    setState((prev) => {
+      const next = {
+        ...prev,
         storage: {
-          ...next.storage,
-          persisted: stateRef.current.storage.persisted,
-          folderName: stateRef.current.storage.folderName,
-          lastFolderSync: stateRef.current.storage.lastFolderSync,
-          cloud: {
-            ...cloud,
-            enabled: true,
-            config: cloud.config,
-            syncKey: cloud.syncKey,
-            lastCloudSync: remoteUpdatedAt,
-          },
+          ...prev.storage,
+          cloud: { ...prev.storage.cloud, lastCloudSync: updatedAt },
         },
       };
       stateRef.current = next;
-      setState(next);
-      await saveStateRecord(next);
-      setSaveStatus('cloud');
-      setSaveError(null);
-      applyingRemoteRef.current = false;
+      return next;
+    });
+    setSaveStatus('cloud');
+    setSaveError(null);
+  }, []);
+
+  const scheduleCloudSync = useCallback(
+    (s: State) => {
+      if (!s.storage.cloud.enabled || !vaultIdRef.current || applyingRemoteRef.current) return;
+      window.clearTimeout(cloudTimer.current);
+      cloudTimer.current = window.setTimeout(() => {
+        void syncCloud(s).catch((e) => {
+          setSaveStatus('error');
+          setSaveError(e instanceof Error ? e.message : 'Cloud sync failed');
+        });
+      }, 300);
     },
-    [],
+    [syncCloud],
   );
+
+  useEffect(() => {
+    scheduleCloudSyncRef.current = scheduleCloudSync;
+  }, [scheduleCloudSync]);
+
+  const applyRemoteSnapshot = useCallback(async (remoteUpdatedAt: number, remoteState: State) => {
+    if (remoteUpdatedAt <= lastSeenRemoteAt.current) return;
+    if (remoteUpdatedAt <= (stateRef.current.storage.cloud.lastCloudSync ?? 0)) return;
+
+    lastSeenRemoteAt.current = remoteUpdatedAt;
+    applyingRemoteRef.current = true;
+    const local = stateRef.current;
+    const cloud = local.storage.cloud;
+    const migratedRemote = migrateState(remoteState);
+    let next = mergeProgressStates(migratedRemote, local);
+    next = {
+      ...next,
+      storage: {
+        ...next.storage,
+        persisted: local.storage.persisted,
+        folderName: local.storage.folderName,
+        lastFolderSync: local.storage.lastFolderSync,
+        cloud: {
+          ...cloud,
+          enabled: true,
+          config: cloud.config,
+          syncKey: cloud.syncKey,
+          lastCloudSync: remoteUpdatedAt,
+        },
+      },
+    };
+    const shouldRepublish = progressFingerprint(next) !== progressFingerprint(migratedRemote);
+    stateRef.current = next;
+    setState(next);
+    await saveStateRecord(next);
+    setSaveStatus('cloud');
+    setSaveError(null);
+    applyingRemoteRef.current = false;
+    if (shouldRepublish) scheduleCloudSyncRef.current(next);
+  }, []);
 
   const startVaultListener = useCallback(
     (vaultId: string, passphrase: string) => {
@@ -157,37 +198,6 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       );
     },
     [applyRemoteSnapshot, stopVaultListener],
-  );
-
-  const syncCloud = useCallback(async (s: State) => {
-    const cloud = s.storage.cloud;
-    if (!cloud.enabled || !cloud.config || !cloud.syncKey || !vaultIdRef.current) return;
-    if (applyingRemoteRef.current) return;
-    const updatedAt = await pushCloudState(vaultIdRef.current, s, cloud.syncKey);
-    lastSeenRemoteAt.current = Math.max(lastSeenRemoteAt.current, updatedAt);
-    setState((prev) => ({
-      ...prev,
-      storage: {
-        ...prev.storage,
-        cloud: { ...prev.storage.cloud, lastCloudSync: updatedAt },
-      },
-    }));
-    setSaveStatus('cloud');
-    setSaveError(null);
-  }, []);
-
-  const scheduleCloudSync = useCallback(
-    (s: State) => {
-      if (!s.storage.cloud.enabled || !vaultIdRef.current || applyingRemoteRef.current) return;
-      window.clearTimeout(cloudTimer.current);
-      cloudTimer.current = window.setTimeout(() => {
-        void syncCloud(s).catch((e) => {
-          setSaveStatus('error');
-          setSaveError(e instanceof Error ? e.message : 'Cloud sync failed');
-        });
-      }, 500);
-    },
-    [syncCloud],
   );
 
   const persist = useCallback(
@@ -296,52 +306,33 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       setCloudReady(true);
 
       const remote = await pullCloudState(vaultId, cloud.syncKey);
-      let merged = local;
-      const stamp = localActivityStamp(local);
-
-      if (remote && (remote.updatedAt >= stamp || remote.updatedAt > (cloud.lastCloudSync ?? 0))) {
-        // Cloud is ahead (or equal) — take it, keep local-only file attachments.
-        merged = mergeLocalFileAttachments(migrateState(remote.state), local);
-        merged.storage = {
+      let merged: State;
+      if (remote) {
+        // Union every progress item from cloud + this device, then publish so Firestore has it all.
+        merged = mergeProgressStates(migrateState(remote.state), local);
+      } else {
+        merged = local;
+      }
+      merged = {
+        ...merged,
+        storage: {
           ...merged.storage,
+          persisted: local.storage.persisted,
+          folderName: local.storage.folderName,
+          lastFolderSync: local.storage.lastFolderSync,
           cloud: {
             ...cloud,
             uid,
-            lastCloudSync: remote.updatedAt,
             enabled: true,
             config: cloud.config,
             syncKey: cloud.syncKey,
           },
-          persisted: local.storage.persisted,
-          folderName: local.storage.folderName,
-          lastFolderSync: local.storage.lastFolderSync,
-        };
-        lastSeenRemoteAt.current = remote.updatedAt;
-      } else {
-        // Local is ahead, or cloud empty — always publish so other devices can pull.
-        merged = {
-          ...local,
-          storage: {
-            ...local.storage,
-            cloud: {
-              ...cloud,
-              uid,
-              enabled: true,
-              config: cloud.config,
-              syncKey: cloud.syncKey,
-            },
-          },
-        };
-        const updatedAt = await pushCloudState(vaultId, merged, cloud.syncKey);
-        merged.storage.cloud.lastCloudSync = updatedAt;
-        lastSeenRemoteAt.current = updatedAt;
-      }
+        },
+      };
 
-      if (remote?.legacy) {
-        const updatedAt = await pushCloudState(vaultId, merged, cloud.syncKey);
-        merged.storage.cloud.lastCloudSync = updatedAt;
-        lastSeenRemoteAt.current = updatedAt;
-      }
+      const updatedAt = await pushCloudState(vaultId, merged, cloud.syncKey);
+      merged.storage.cloud.lastCloudSync = updatedAt;
+      lastSeenRemoteAt.current = updatedAt;
 
       startVaultListener(vaultId, cloud.syncKey);
       return merged;
@@ -441,7 +432,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     folderNeedsReconnect,
     cloudReady,
     setPrefs: (patch) => update((s) => ({ ...s, prefs: { ...s.prefs, ...patch } })),
-    markDone: (id, done = true) =>
+    markDone: (id, done = true) => {
       update((s) => {
         const next = { ...s, done: { ...s.done }, optOut: { ...s.optOut } };
         if (done) {
@@ -452,7 +443,9 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
           next.optOut[id] = true;
         }
         return next;
-      }),
+      });
+      void persistDebounced.flush();
+    },
     updatePage: (id, patch) =>
       update((s) => ({
         ...s,

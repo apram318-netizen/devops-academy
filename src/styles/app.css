@@ -1529,6 +1529,11 @@ code {
   place-items: center;
   padding: 16px;
 }
+.passphrase-gate {
+  z-index: 80;
+  background: rgba(12, 10, 9, 0.72);
+  backdrop-filter: blur(6px);
+}
 .dialog {
   background: var(--surface);
   border-radius: 14px;

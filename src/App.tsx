@@ -13,6 +13,7 @@ import { AllGrades, UnitGrades } from './views/Grades';
 import { GuideView } from './views/Guide';
 import { CalendarView } from './views/Calendar';
 import { Settings } from './views/Settings';
+import { PassphraseGate } from './components/PassphraseGate';
 
 function Router() {
   const route = useRoute();
@@ -88,7 +89,12 @@ function Router() {
       );
   }
 
-  return <AppShell route={route}>{view}</AppShell>;
+  return (
+    <>
+      <PassphraseGate />
+      <AppShell route={route}>{view}</AppShell>
+    </>
+  );
 }
 
 export function App() {

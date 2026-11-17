@@ -70,8 +70,8 @@ export async function connectCloud(
   config: FirebaseWebConfig,
   syncKey: string,
 ): Promise<{ uid: string; vaultId: string }> {
-  if (!syncKey.trim() || syncKey.trim().length < 8) {
-    throw new Error('Choose a sync passphrase of at least 8 characters');
+  if (!syncKey.trim() || syncKey.trim().length < 12) {
+    throw new Error('Choose a sync passphrase of at least 12 characters');
   }
   const { uid } = await initFirebase(config);
   const vaultId = await sha256Hex(`devops-academy:${syncKey.trim()}`);

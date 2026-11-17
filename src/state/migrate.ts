@@ -1,4 +1,4 @@
-import { DEFAULT_CLOUD, DEFAULT_STATE, type State } from './types';
+import { DEFAULT_CLOUD, DEFAULT_STATE, type CloudSettings, type State } from './types';
 
 export function migrateState(raw: unknown): State {
   if (!raw || typeof raw !== 'object') return structuredClone(DEFAULT_STATE);
@@ -21,7 +21,11 @@ export function migrateState(raw: unknown): State {
     storage: {
       ...DEFAULT_STATE.storage,
       ...storageIn,
-      cloud: { ...DEFAULT_CLOUD, ...(storageIn.cloud ?? {}) },
+      cloud: {
+        ...DEFAULT_CLOUD,
+        ...(storageIn.cloud ?? {}),
+        rememberKey: (storageIn.cloud as CloudSettings | undefined)?.rememberKey ?? true,
+      },
     },
   };
 

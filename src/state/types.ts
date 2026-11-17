@@ -54,7 +54,9 @@ export type FirebaseWebConfig = {
 export type CloudSettings = {
   enabled: boolean;
   config: FirebaseWebConfig | null;
+  /** Present in memory while unlocked; only persisted when rememberKey is true. */
   syncKey: string;
+  rememberKey: boolean;
   lastCloudSync: number | null;
   uid: string | null;
 };
@@ -86,6 +88,7 @@ export const DEFAULT_CLOUD: CloudSettings = {
   enabled: false,
   config: null,
   syncKey: '',
+  rememberKey: true,
   lastCloudSync: null,
   uid: null,
 };

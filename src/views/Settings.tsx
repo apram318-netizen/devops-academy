@@ -6,18 +6,10 @@ import { BUILT_IN_FIREBASE_CONFIG } from '../cloud/projectConfig';
 import { Button, Dialog } from '../components/ui';
 import type { FirebaseWebConfig } from '../state/types';
 
-const SETUP = `Firebase project is already wired for this site (devops-course-7e346).
+const SETUP = `A passphrase prompt appears when you open the site until cloud sync is unlocked.
 
-Cloud sync stores every progress change in Firestore (completions, notes, lab steps, quizzes, assignment text/grades, UI). File bytes stay on this device; file names still sync with the submission.
-
-Before first connect, finish console setup once:
-1. Authentication → enable Anonymous sign-in
-2. Firestore → paste firestore.rules from the repo (Storage is not required)
-3. Lock the Browser API key referrers to:
-   https://apram318-netizen.github.io/*
-   http://localhost:*
-
-Then enter your sync passphrase below and connect. The passphrase stays in this browser only (never in GitHub). Use the same passphrase on every device.`;
+Progress is encrypted before it is written to Firestore. Use the same passphrase on every device.
+Firebase console (once): Anonymous auth on, paste firestore.rules, lock API key referrers to this GitHub Pages host.`;
 
 export function Settings() {
   const {
@@ -39,7 +31,8 @@ export function Settings() {
   const [configText, setConfigText] = useState(() =>
     JSON.stringify(state.storage.cloud.config ?? BUILT_IN_FIREBASE_CONFIG, null, 2),
   );
-  const [syncKey, setSyncKey] = useState(state.storage.cloud.syncKey || '');
+  const [syncKey, setSyncKey] = useState('');
+  const [remember, setRemember] = useState(state.storage.cloud.rememberKey !== false);
   const [busy, setBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
 
@@ -58,7 +51,8 @@ export function Settings() {
     setBusy(true);
     try {
       const config = parseConfig();
-      await connectCloudSync(config, syncKey);
+      await connectCloudSync(config, syncKey, { remember });
+      setSyncKey('');
       setToast('Cloud sync connected');
     } catch (e) {
       setCloudError(e instanceof Error ? e.message : 'Could not connect');
@@ -125,16 +119,26 @@ export function Settings() {
             <input
               id="sync-key"
               type="password"
-              autoComplete="off"
+              autoComplete="new-password"
+              spellcheck={false}
               value={syncKey}
               onInput={(e) => setSyncKey((e.target as HTMLInputElement).value)}
-              placeholder="12+ characters — same on every device"
+              placeholder={cloudReady ? 'Enter to reconnect' : 'At least 12 characters'}
             />
             <div class="field-help">
-              This encrypts your vault. It is stored only in this browser after you connect — never commit it to
-              GitHub. Anyone who knows it can load your progress.
+              Never shown after unlock. Encrypts your vault — anyone with this passphrase can read your cloud
+              progress.
             </div>
           </div>
+          <label class="check-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, marginBottom: 12 }}>
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember((e.target as HTMLInputElement).checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>Remember passphrase on this device</span>
+          </label>
           <details
             open={showAdvanced}
             onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}

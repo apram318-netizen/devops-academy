@@ -65,7 +65,11 @@ type StoreValue = {
   getFile: (id: string) => Promise<Blob | null>;
   connectFolder: () => Promise<void>;
   reconnectFolder: () => Promise<void>;
-  connectCloudSync: (config: FirebaseWebConfig, syncKey: string) => Promise<void>;
+  connectCloudSync: (
+    config: FirebaseWebConfig,
+    syncKey: string,
+    opts?: { remember?: boolean },
+  ) => Promise<void>;
   disconnectCloudSync: () => void;
   syncNow: () => Promise<void>;
   exportBackup: () => Promise<void>;
@@ -98,7 +102,18 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
   }, [state]);
 
   const persistLocal = useCallback(async (next: State) => {
-    await saveStateRecord(next);
+    // Never write the raw passphrase to disk unless the user opted into "Remember".
+    const toSave =
+      next.storage.cloud.rememberKey && next.storage.cloud.syncKey
+        ? next
+        : {
+            ...next,
+            storage: {
+              ...next.storage,
+              cloud: { ...next.storage.cloud, syncKey: '' },
+            },
+          };
+    await saveStateRecord(toSave);
   }, []);
 
   const stopVaultListener = useCallback(() => {
@@ -174,12 +189,12 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     const shouldRepublish = progressFingerprint(next) !== progressFingerprint(migratedRemote);
     stateRef.current = next;
     setState(next);
-    await saveStateRecord(next);
+    await persistLocal(next);
     setSaveStatus('cloud');
     setSaveError(null);
     applyingRemoteRef.current = false;
     if (shouldRepublish) scheduleCloudSyncRef.current(next);
-  }, []);
+  }, [persistLocal]);
 
   const startVaultListener = useCallback(
     (vaultId: string, passphrase: string) => {
@@ -384,7 +399,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
 
         setState(migrated);
         stateRef.current = migrated;
-        await saveStateRecord(migrated);
+        await persistLocal(migrated);
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : 'Failed to load');
         setSaveStatus('error');
@@ -392,6 +407,8 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         setReady(true);
       }
     })();
+    // bootstrap/persist helpers are stable enough for one-shot boot
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -509,7 +526,8 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         await syncFolder(stateRef.current);
       }
     },
-    connectCloudSync: async (config, syncKey) => {
+    connectCloudSync: async (config, syncKey, opts) => {
+      const remember = opts?.remember ?? true;
       const { uid, vaultId } = await connectCloud(config, syncKey);
       vaultIdRef.current = vaultId;
       setCloudReady(true);
@@ -517,6 +535,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         enabled: true,
         config,
         syncKey,
+        rememberKey: remember,
         uid,
         lastCloudSync: stateRef.current.storage.cloud.lastCloudSync,
       };
@@ -525,9 +544,11 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         storage: { ...stateRef.current.storage, cloud },
       };
       next = await bootstrapCloud(cloud, next);
+      next.storage.cloud.rememberKey = remember;
+      next.storage.cloud.syncKey = syncKey;
       setState(next);
       stateRef.current = next;
-      await saveStateRecord(next);
+      await persistLocal(next);
       setSaveStatus('cloud');
       setSaveError(null);
     },
@@ -539,7 +560,11 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         ...s,
         storage: {
           ...s.storage,
-          cloud: { ...DEFAULT_CLOUD, config: s.storage.cloud.config, syncKey: s.storage.cloud.syncKey },
+          cloud: {
+            ...DEFAULT_CLOUD,
+            config: s.storage.cloud.config,
+            rememberKey: s.storage.cloud.rememberKey,
+          },
         },
       }));
       setSaveStatus(folderHandleRef.current ? 'folder' : 'browser');
@@ -567,7 +592,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       }
       setState(migrated);
       stateRef.current = migrated;
-      await saveStateRecord(migrated);
+      await persistLocal(migrated);
     },
     resetProgress: async () => {
       const cloud = stateRef.current.storage.cloud;
@@ -585,7 +610,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       folderHandleRef.current = null;
       setState(next);
       stateRef.current = next;
-      await saveStateRecord(next);
+      await persistLocal(next);
       if (next.storage.cloud.enabled && vaultIdRef.current && next.storage.cloud.syncKey) {
         await pushCloudState(vaultIdRef.current, next, next.storage.cloud.syncKey);
       }

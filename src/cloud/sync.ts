@@ -1,16 +1,9 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { deleteObject, getBlob, listAll, ref, uploadBytes } from 'firebase/storage';
 import type { State } from '../state/types';
 import { DEFAULT_CLOUD } from '../state/types';
 import { sha256Hex } from './hash';
 import { getFirebase, initFirebase } from './firebase';
-import {
-  decryptBlob,
-  decryptJson,
-  deriveVaultKey,
-  encryptBlob,
-  encryptJson,
-} from './crypto';
+import { decryptJson, deriveVaultKey, encryptJson } from './crypto';
 import type { CloudSettings, FirebaseWebConfig } from './types';
 
 export type CloudSnapshot = {
@@ -37,7 +30,7 @@ function vaultPath(vaultId: string) {
   return `vaults/${vaultId}`;
 }
 
-/** Never upload Firebase web config or the raw passphrase to Firestore. */
+/** Never upload Firebase config, passphrase, or file attachment blobs/metadata. */
 export function scrubSecretsForCloud(state: State): State {
   const clone = structuredClone(state);
   clone.storage = {
@@ -49,7 +42,23 @@ export function scrubSecretsForCloud(state: State): State {
       uid: null,
     },
   };
+  // Submitted files stay on-device (IndexedDB / optional folder). Cloud sync is progress only.
+  for (const id of Object.keys(clone.subs)) {
+    const sub = clone.subs[id];
+    if (sub) clone.subs[id] = { ...sub, files: [] };
+  }
   return clone;
+}
+
+/** After a cloud pull, keep any file attachments that only exist on this device. */
+export function mergeLocalFileAttachments(remote: State, local: State): State {
+  const subs = { ...remote.subs };
+  for (const [id, localSub] of Object.entries(local.subs)) {
+    if (!localSub.files?.length) continue;
+    const remoteSub = subs[id];
+    subs[id] = remoteSub ? { ...remoteSub, files: localSub.files } : localSub;
+  }
+  return { ...remote, subs };
 }
 
 export function restoreLocalSecrets(remote: State, localCloud: CloudSettings): State {
@@ -97,7 +106,6 @@ export async function pullCloudState(
     }
   }
 
-  // Legacy plaintext docs from the first cloud-sync build
   if (data.state) {
     return { updatedAt: data.updatedAt ?? 0, state: data.state, legacy: true };
   }
@@ -131,99 +139,6 @@ export async function pushCloudState(
   };
   await setDoc(doc(db, vaultPath(vaultId)), payload, { merge: false });
   return updatedAt;
-}
-
-async function vaultKeyForFiles(vaultId: string, passphrase: string): Promise<CryptoKey> {
-  const { db } = getFirebase();
-  if (!db) throw new Error('Cloud not connected');
-  const snap = await getDoc(doc(db, vaultPath(vaultId)));
-  const data = snap.exists() ? (snap.data() as EncryptedVaultDoc) : null;
-  if (data?.v === 2 && data.saltB64) {
-    const { key } = await deriveVaultKey(passphrase, data.saltB64);
-    return key;
-  }
-  const { key } = await deriveVaultKey(passphrase);
-  return key;
-}
-
-export async function pushCloudFile(
-  vaultId: string,
-  id: string,
-  blob: Blob,
-  passphrase: string,
-): Promise<void> {
-  const { storage } = getFirebase();
-  if (!storage) throw new Error('Cloud not connected');
-  const key = await vaultKeyForFiles(vaultId, passphrase);
-  const encrypted = await encryptBlob(key, blob);
-  const r = ref(storage, `${vaultPath(vaultId)}/files/${id}`);
-  await uploadBytes(r, encrypted, { contentType: 'application/octet-stream' });
-}
-
-export async function pullCloudFile(
-  vaultId: string,
-  id: string,
-  passphrase: string,
-): Promise<Blob | null> {
-  const { storage } = getFirebase();
-  if (!storage) throw new Error('Cloud not connected');
-  try {
-    const raw = await getBlob(ref(storage, `${vaultPath(vaultId)}/files/${id}`));
-    const key = await vaultKeyForFiles(vaultId, passphrase);
-    return await decryptBlob(key, raw);
-  } catch {
-    return null;
-  }
-}
-
-export async function deleteCloudFile(vaultId: string, id: string): Promise<void> {
-  const { storage } = getFirebase();
-  if (!storage) return;
-  try {
-    await deleteObject(ref(storage, `${vaultPath(vaultId)}/files/${id}`));
-  } catch {
-    /* ignore missing */
-  }
-}
-
-export async function listCloudFileIds(vaultId: string): Promise<string[]> {
-  const { storage } = getFirebase();
-  if (!storage) return [];
-  try {
-    const res = await listAll(ref(storage, `${vaultPath(vaultId)}/files`));
-    return res.items.map((i) => i.name);
-  } catch {
-    return [];
-  }
-}
-
-export async function pushAllFiles(
-  vaultId: string,
-  files: { id: string; blob: Blob }[],
-  passphrase: string,
-): Promise<void> {
-  for (const f of files) {
-    await pushCloudFile(vaultId, f.id, f.blob, passphrase);
-  }
-}
-
-export async function pullMissingFiles(
-  vaultId: string,
-  neededIds: string[],
-  passphrase: string,
-  hasLocal: (id: string) => Promise<boolean>,
-  saveLocal: (id: string, blob: Blob) => Promise<void>,
-): Promise<number> {
-  let n = 0;
-  for (const id of neededIds) {
-    if (await hasLocal(id)) continue;
-    const blob = await pullCloudFile(vaultId, id, passphrase);
-    if (blob) {
-      await saveLocal(id, blob);
-      n++;
-    }
-  }
-  return n;
 }
 
 export function cloudStatusLabel(cloud: CloudSettings): string | null {

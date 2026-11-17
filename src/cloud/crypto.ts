@@ -26,7 +26,6 @@ export async function deriveVaultKey(passphrase: string, saltB64?: string): Prom
   const material = await crypto.subtle.importKey('raw', encoder.encode(passphrase.trim()), 'PBKDF2', false, [
     'deriveKey',
   ]);
-  // Mix fixed purpose string into salt so keys are app-specific even if salt is reused elsewhere.
   const prefix = encoder.encode(SALT_PREFIX);
   const mixed = new Uint8Array(prefix.length + salt.length);
   mixed.set(prefix, 0);
@@ -53,30 +52,4 @@ export async function decryptJson<T>(key: CryptoKey, ivB64: string, ciphertextB6
   const cipher = b64decode(ciphertextB64);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
   return JSON.parse(decoder.decode(plain)) as T;
-}
-
-const FILE_MAGIC = encoder.encode('DAE1'); // DevOps Academy Encrypted v1
-
-export async function encryptBlob(key: CryptoKey, blob: Blob): Promise<Blob> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const plain = new Uint8Array(await blob.arrayBuffer());
-  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain));
-  const out = new Uint8Array(FILE_MAGIC.length + iv.length + cipher.length);
-  out.set(FILE_MAGIC, 0);
-  out.set(iv, FILE_MAGIC.length);
-  out.set(cipher, FILE_MAGIC.length + iv.length);
-  return new Blob([out], { type: 'application/octet-stream' });
-}
-
-export async function decryptBlob(key: CryptoKey, blob: Blob, fallbackType = 'application/octet-stream'): Promise<Blob> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  const magic = decoder.decode(buf.slice(0, 4));
-  if (magic !== 'DAE1') {
-    // Legacy plaintext upload from earlier builds
-    return blob;
-  }
-  const iv = buf.slice(4, 16);
-  const cipher = buf.slice(16);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
-  return new Blob([plain], { type: fallbackType });
 }

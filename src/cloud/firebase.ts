@@ -1,23 +1,20 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import type { FirebaseWebConfig } from './types';
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
-let storage: FirebaseStorage | null = null;
 
 export function getFirebase() {
-  return { app, auth, db, storage };
+  return { app, auth, db };
 }
 
 export async function initFirebase(config: FirebaseWebConfig): Promise<{
   app: FirebaseApp;
   auth: Auth;
   db: Firestore;
-  storage: FirebaseStorage;
   uid: string;
 }> {
   if (!getApps().length) {
@@ -27,7 +24,6 @@ export async function initFirebase(config: FirebaseWebConfig): Promise<{
   }
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
 
   const uid = await new Promise<string>((resolve, reject) => {
     const unsub = onAuthStateChanged(
@@ -51,12 +47,11 @@ export async function initFirebase(config: FirebaseWebConfig): Promise<{
     );
   });
 
-  return { app, auth, db, storage, uid };
+  return { app, auth, db, uid };
 }
 
 export function clearFirebase() {
   app = null;
   auth = null;
   db = null;
-  storage = null;
 }

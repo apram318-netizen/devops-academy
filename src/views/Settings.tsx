@@ -8,9 +8,11 @@ import type { FirebaseWebConfig } from '../state/types';
 
 const SETUP = `Firebase project is already wired for this site (devops-course-7e346).
 
+Cloud sync covers progress only (weeks done, notes, quiz/assignment text). Submitted files stay on this device (IndexedDB; optional folder backup).
+
 Before first connect, finish console setup once:
 1. Authentication → enable Anonymous sign-in
-2. Paste firestore.rules and storage.rules from the repo into Firestore + Storage
+2. Firestore → paste firestore.rules from the repo (Storage is not required)
 3. Lock the Browser API key referrers to:
    https://apram318-netizen.github.io/*
    http://localhost:*

@@ -32,13 +32,7 @@ import {
   writeFolderSync,
 } from '../storage/folder';
 import { createBackup, downloadJson, restoreBackup, type BackupPayload } from '../storage/backup';
-import {
-  connectCloud,
-  pullCloudState,
-  pullMissingFiles,
-  pushAllFiles,
-  pushCloudState,
-} from '../cloud/sync';
+import { connectCloud, mergeLocalFileAttachments, pullCloudState, pushCloudState } from '../cloud/sync';
 import { sha256Hex } from '../cloud/hash';
 
 export type SaveStatus = 'browser' | 'folder' | 'cloud' | 'error' | 'idle';
@@ -74,14 +68,6 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
-function collectFileIds(state: State): string[] {
-  const ids = new Set<string>();
-  for (const sub of Object.values(state.subs)) {
-    for (const f of sub.files) ids.add(f.id);
-  }
-  return [...ids];
-}
-
 export function StoreProvider({ children }: { children: ComponentChildren }) {
   const [state, setState] = useState<State>(DEFAULT_STATE);
   const [ready, setReady] = useState(false);
@@ -107,13 +93,6 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
     const cloud = s.storage.cloud;
     if (!cloud.enabled || !cloud.config || !cloud.syncKey || !vaultIdRef.current) return;
     const updatedAt = await pushCloudState(vaultIdRef.current, s, cloud.syncKey);
-    const ids = await listFileIds();
-    const files: { id: string; blob: Blob }[] = [];
-    for (const id of ids) {
-      const blob = await loadFileBlob(id);
-      if (blob) files.push({ id, blob });
-    }
-    if (files.length) await pushAllFiles(vaultIdRef.current, files, cloud.syncKey);
     setState((prev) => ({
       ...prev,
       storage: {
@@ -253,7 +232,7 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
         ...Object.values(local.subs).map((s) => s.modified),
       );
       if (remote.updatedAt >= localStamp) {
-        merged = migrateState(remote.state);
+        merged = mergeLocalFileAttachments(migrateState(remote.state), local);
         merged.storage = {
           ...merged.storage,
           cloud: {
@@ -279,26 +258,10 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       uid,
     };
 
-    const needed = collectFileIds(merged);
-    await pullMissingFiles(
-      vaultId,
-      needed,
-      cloud.syncKey,
-      async (id) => Boolean(await loadFileBlob(id)),
-      async (id, blob) => saveFileBlob(id, blob),
-    );
-
     // Push local up if cloud empty, or upgrade a legacy plaintext vault to encrypted.
     if (!remote || remote.legacy) {
       const updatedAt = await pushCloudState(vaultId, merged, cloud.syncKey);
       merged.storage.cloud.lastCloudSync = updatedAt;
-      const ids = await listFileIds();
-      const files: { id: string; blob: Blob }[] = [];
-      for (const id of ids) {
-        const blob = await loadFileBlob(id);
-        if (blob) files.push({ id, blob });
-      }
-      if (files.length) await pushAllFiles(vaultId, files, cloud.syncKey);
     }
 
     return merged;
@@ -426,27 +389,10 @@ export function StoreProvider({ children }: { children: ComponentChildren }) {
       if (file.size > 20 * 1024 * 1024) throw new Error('Each file must be 20 MB or smaller');
       const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await saveFileBlob(id, file);
-      const pass = stateRef.current.storage.cloud.syncKey;
-      if (vaultIdRef.current && stateRef.current.storage.cloud.enabled && pass) {
-        try {
-          const { pushCloudFile } = await import('../cloud/sync');
-          await pushCloudFile(vaultIdRef.current, id, file, pass);
-        } catch {
-          /* queued on next full sync */
-        }
-      }
       return { id, name: file.name, size: file.size, type: file.type || 'application/octet-stream' };
     },
     removeFile: async (id) => {
       await deleteFileBlob(id);
-      if (vaultIdRef.current) {
-        try {
-          const { deleteCloudFile } = await import('../cloud/sync');
-          await deleteCloudFile(vaultIdRef.current, id);
-        } catch {
-          /* ignore */
-        }
-      }
     },
     getFile: (id) => loadFileBlob(id),
     connectFolder: async () => {

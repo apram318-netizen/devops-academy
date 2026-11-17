@@ -14,10 +14,10 @@ https://apram318-netizen.github.io/devops-academy/
 
 ## Where your data lives
 
-- **Cloud (recommended):** Settings → Cloud sync with a free Firebase (Spark) project. Same Firebase config + sync passphrase on any device restores progress and files. See `firestore.rules` and `storage.rules`.
-- **This browser:** IndexedDB cache `devops-academy` for offline use.
-- **Optional folder (Chrome/Edge):** Settings → “Also save to a folder”.
-- **Manual backup:** Settings → Export backup / Import backup.
+- **Cloud (recommended):** Settings → Cloud sync (Firebase Spark). Same passphrase on any device restores progress text. See `firestore.rules`. Submitted files stay local.
+- **This browser:** IndexedDB for progress cache and uploaded files.
+- **Optional folder (Chrome/Edge):** Settings → “Also save to a folder” (includes local files).
+- **Manual backup:** Settings → Export backup / Import backup (includes files).
 
 ## Back up
 

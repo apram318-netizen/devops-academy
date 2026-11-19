@@ -1505,6 +1505,20 @@ code {
   white-space: nowrap;
   margin-bottom: 2px;
 }
+.cal-pill-forge {
+  background: color-mix(in srgb, #0d9488 16%, transparent);
+  color: #0f766e;
+}
+.cal-pill-major {
+  background: color-mix(in srgb, var(--warning, #ca8a04) 18%, transparent);
+  color: #a16207;
+}
+[data-theme='dark'] .cal-pill-forge {
+  color: #5eead4;
+}
+[data-theme='dark'] .cal-pill-major {
+  color: #fbbf24;
+}
 .cal-panel {
   position: fixed;
   top: var(--topbar);

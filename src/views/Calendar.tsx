@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'preact/hooks';
 import { useStore } from '../state/store';
-import { ASSESSMENTS, getUnit } from '../data/curriculum';
-import { activitiesForWeek, activityHref, globalWeekForUnitWeek } from '../lib/activities';
+import { ASSESSMENTS, getUnit, UNITS } from '../data/curriculum';
+import { activitiesForWeek, globalWeekForUnitWeek } from '../lib/activities';
+import {
+  FORGE_MILESTONES,
+  forgeTaskDoneId,
+  listAllForgeWeeks,
+} from '../data/squadforge';
 import {
   addDays,
   dueSunday,
@@ -13,16 +18,22 @@ import {
 } from '../lib/dates';
 import { Chip, IconBtn } from '../components/ui';
 import { ChevronLeft, ChevronRight, X } from 'lucide-preact';
-import { UNITS } from '../data/curriculum';
 
 type CalEvent = {
   id: string;
   title: string;
   date: Date;
   href: string;
-  kind: 'major' | 'weekly';
+  kind: 'major' | 'weekly' | 'forge';
   unitCode?: string;
+  meta?: string;
 };
+
+function chipFor(kind: CalEvent['kind']): { tone: 'warning' | 'info' | 'neutral'; label: string } {
+  if (kind === 'major') return { tone: 'warning', label: 'Assessment' };
+  if (kind === 'forge') return { tone: 'info', label: 'SquadForge' };
+  return { tone: 'neutral', label: 'Weekly' };
+}
 
 export function CalendarView() {
   const { state } = useStore();
@@ -31,6 +42,7 @@ export function CalendarView() {
 
   const events = useMemo(() => {
     const list: CalEvent[] = [];
+
     for (const a of ASSESSMENTS) {
       const unit = getUnit(a.unit);
       if (!unit) continue;
@@ -43,35 +55,104 @@ export function CalendarView() {
         unitCode: unit.code,
       });
     }
+
+    for (const m of FORGE_MILESTONES) {
+      const unit = getUnit(m.unit);
+      list.push({
+        id: `forge-milestone-${m.id}`,
+        title: `Milestone: ${m.title}`,
+        date: new Date(m.by + 'T23:59:00'),
+        href: '#/project',
+        kind: 'forge',
+        unitCode: unit?.code,
+        meta: m.doneWhen,
+      });
+    }
+
     for (const unit of UNITS) {
       for (let i = 0; i < unit.weeks.length; i++) {
         const gw = globalWeekForUnitWeek(unit, i);
-        const acts = activitiesForWeek(unit, i).filter((x) => x.kind === 'lab' || x.kind === 'quiz' || x.kind === 'scenarios');
+        const acts = activitiesForWeek(unit, i).filter(
+          (x) => x.kind === 'lab' || x.kind === 'quiz' || x.kind === 'scenarios',
+        );
         if (!acts.length) continue;
-        const open = acts.filter((x) => state.subs[x.id]?.status !== 'submitted' && !(x.kind === 'quiz' && (state.quiz[x.id]?.attempts.some((at) => (at.score ?? 0) >= 2)))).length;
-        const due = dueSunday(state.prefs.start, gw);
+        const open = acts.filter((x) => {
+          if (state.subs[x.id]?.status === 'submitted') return false;
+          if (x.kind === 'quiz' && state.quiz[x.id]?.attempts.some((at) => (at.score ?? 0) >= 2)) {
+            return false;
+          }
+          return true;
+        }).length;
         list.push({
           id: `${unit.id}-w${gw}-weekly`,
           title: `Weekly tasks (${open} open)`,
-          date: due,
+          date: dueSunday(state.prefs.start, gw),
           href: `#/course/${unit.id}/week/${gw}`,
           kind: 'weekly',
           unitCode: unit.code,
         });
       }
     }
+
+    for (const w of listAllForgeWeeks()) {
+      const due = dueSunday(state.prefs.start, w.programWeek);
+      const openTasks = w.plan.tasks.filter(
+        (t) => !state.done[forgeTaskDoneId(w.unitId, w.weekIndex, t.id)],
+      );
+      const done = w.plan.tasks.length - openTasks.length;
+
+      list.push({
+        id: `forge-week-${w.unitId}-w${w.weekIndex}`,
+        title: `SquadForge (${done}/${w.plan.tasks.length})`,
+        date: due,
+        href: w.href,
+        kind: 'forge',
+        unitCode: w.unitCode,
+        meta: w.plan.summary,
+      });
+
+      for (const task of openTasks) {
+        list.push({
+          id: forgeTaskDoneId(w.unitId, w.weekIndex, task.id),
+          title: task.title,
+          date: due,
+          href: w.href,
+          kind: 'forge',
+          unitCode: w.unitCode,
+          meta: `${w.unitCode} · Week ${w.weekIndex}: ${w.weekTitle}`,
+        });
+      }
+    }
+
     return list;
   }, [state]);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
-  const gridStart = addDays(monthStart, -((monthStart.getDay() + 6) % 7)); // Monday-first
+  const gridStart = addDays(monthStart, -((monthStart.getDay() + 6) % 7));
   const days: Date[] = [];
   for (let i = 0; i < 42; i++) days.push(addDays(gridStart, i));
 
   const monthLabel = cursor.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+
+  /** Compact pills on the grid: assessments + weekly + one forge rollup per week (not every task). */
+  const gridEvents = useMemo(
+    () =>
+      events.filter(
+        (e) => e.kind === 'major' || e.kind === 'weekly' || e.id.startsWith('forge-week-'),
+      ),
+    [events],
+  );
+
   const selectedEvents = selected
-    ? events.filter((e) => sameDay(e.date, selected)).sort((a, b) => a.title.localeCompare(b.title))
+    ? events
+        .filter((e) => sameDay(e.date, selected))
+        .sort((a, b) => {
+          const order = { major: 0, forge: 1, weekly: 2 } as const;
+          const d = order[a.kind] - order[b.kind];
+          if (d !== 0) return d;
+          return a.title.localeCompare(b.title);
+        })
     : [];
 
   return (
@@ -99,8 +180,8 @@ export function CalendarView() {
         ))}
         {days.map((d) => {
           const inMonth = d.getMonth() === cursor.getMonth();
-          const dayEvents = events.filter((e) => sameDay(e.date, d));
-          const shown = dayEvents.slice(0, 2);
+          const dayEvents = gridEvents.filter((e) => sameDay(e.date, d));
+          const shown = dayEvents.slice(0, 3);
           const more = dayEvents.length - shown.length;
           const today = sameDay(d, new Date());
           return (
@@ -112,8 +193,13 @@ export function CalendarView() {
             >
               <span class={`cal-daynum ${today ? 'today' : ''}`}>{d.getDate()}</span>
               {shown.map((e) => (
-                <span key={e.id} class="cal-pill" title={e.title}>
-                  {e.kind === 'weekly' ? e.title : e.title}
+                <span
+                  key={e.id}
+                  class={`cal-pill ${e.kind === 'forge' ? 'cal-pill-forge' : e.kind === 'major' ? 'cal-pill-major' : ''}`}
+                  title={e.meta ? `${e.title} — ${e.meta}` : e.title}
+                >
+                  {e.unitCode ? `${e.unitCode} · ` : ''}
+                  {e.kind === 'forge' ? e.title : e.kind === 'weekly' ? e.title : e.title}
                 </span>
               ))}
               {more > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{more} more</span>}
@@ -133,22 +219,30 @@ export function CalendarView() {
           {selectedEvents.length === 0 ? (
             <p style={{ color: 'var(--text-muted)' }}>Nothing due this day</p>
           ) : (
-            selectedEvents.map((e) => (
-              <a key={e.id} class="activity-row" href={e.href} style={{ paddingLeft: 0 }} onClick={() => setSelected(null)}>
-                <div class="activity-body">
-                  <p class="activity-name">{e.title}</p>
-                  <p class="activity-meta">
-                    {e.unitCode} · {formatLongDateTime(e.date)}
-                  </p>
-                </div>
-                <Chip tone={e.kind === 'major' ? 'warning' : 'neutral'}>{e.kind === 'major' ? 'Assessment' : 'Weekly'}</Chip>
-              </a>
-            ))
+            selectedEvents.map((e) => {
+              const chip = chipFor(e.kind);
+              return (
+                <a
+                  key={e.id}
+                  class="activity-row"
+                  href={e.href}
+                  style={{ paddingLeft: 0 }}
+                  onClick={() => setSelected(null)}
+                >
+                  <div class="activity-body">
+                    <p class="activity-name">{e.title}</p>
+                    <p class="activity-meta">
+                      {e.meta ? `${e.meta} · ` : e.unitCode ? `${e.unitCode} · ` : ''}
+                      {formatLongDateTime(e.date)}
+                    </p>
+                  </div>
+                  <Chip tone={chip.tone}>{chip.label}</Chip>
+                </a>
+              );
+            })
           )}
         </div>
       )}
     </div>
   );
 }
-
-void activityHref;

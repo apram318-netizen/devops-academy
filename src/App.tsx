@@ -80,7 +80,7 @@ function Router() {
       view = <Settings />;
       break;
     case 'project':
-      view = <ProjectView />;
+      view = <ProjectView focusTask={route.task} focusPhase={route.phase} />;
       break;
     default:
       view = (

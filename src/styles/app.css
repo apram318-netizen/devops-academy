@@ -1849,6 +1849,50 @@ code {
 .forge-open-week {
   font-size: 13px;
 }
+.forge-learn-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0 4px;
+}
+.forge-learn-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 6px;
+}
+.forge-learn-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 220px;
+}
+.forge-learn-chip:hover {
+  border-color: var(--accent);
+}
+.forge-learn-why {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.forge-week-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.forge-task-done-row {
+  opacity: 0.75;
+}
 
 .forge-week-panel {
   margin: 8px 0 16px;

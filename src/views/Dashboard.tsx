@@ -120,7 +120,7 @@ export function Dashboard() {
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Spine project</div>
           <div style={{ fontWeight: 700, fontSize: 18 }}>SquadForge</div>
           <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
-            On-demand game-server SaaS — milestones, stack, and weekly apply steps
+            Real-world project timeline — phases link to any subject week you need
           </div>
         </a>
       </section>

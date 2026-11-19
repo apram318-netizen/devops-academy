@@ -3,9 +3,9 @@ import { useStore } from '../state/store';
 import { ASSESSMENTS, getUnit, UNITS } from '../data/curriculum';
 import { activitiesForWeek, globalWeekForUnitWeek } from '../lib/activities';
 import {
-  FORGE_MILESTONES,
-  forgeTaskDoneId,
-  listAllForgeWeeks,
+  listAllProjectTasks,
+  listProjectPhases,
+  projectTaskDoneId,
 } from '../data/squadforge';
 import {
   addDays,
@@ -56,19 +56,6 @@ export function CalendarView() {
       });
     }
 
-    for (const m of FORGE_MILESTONES) {
-      const unit = getUnit(m.unit);
-      list.push({
-        id: `forge-milestone-${m.id}`,
-        title: `Milestone: ${m.title}`,
-        date: new Date(m.by + 'T23:59:00'),
-        href: '#/project',
-        kind: 'forge',
-        unitCode: unit?.code,
-        meta: m.doneWhen,
-      });
-    }
-
     for (const unit of UNITS) {
       for (let i = 0; i < unit.weeks.length; i++) {
         const gw = globalWeekForUnitWeek(unit, i);
@@ -94,34 +81,28 @@ export function CalendarView() {
       }
     }
 
-    for (const w of listAllForgeWeeks()) {
-      const due = dueSunday(state.prefs.start, w.programWeek);
-      const openTasks = w.plan.tasks.filter(
-        (t) => !state.done[forgeTaskDoneId(w.unitId, w.weekIndex, t.id)],
-      );
-      const done = w.plan.tasks.length - openTasks.length;
-
+    for (const phase of listProjectPhases()) {
+      const openInPhase = phase.tasks.filter((t) => !state.done[projectTaskDoneId(t.id)]).length;
       list.push({
-        id: `forge-week-${w.unitId}-w${w.weekIndex}`,
-        title: `SquadForge (${done}/${w.plan.tasks.length})`,
-        date: due,
-        href: w.href,
+        id: `forge-phase-${phase.id}`,
+        title: `${phase.title} (${phase.tasks.length - openInPhase}/${phase.tasks.length})`,
+        date: new Date(phase.by + 'T23:59:00'),
+        href: `#/project?phase=${encodeURIComponent(phase.id)}`,
         kind: 'forge',
-        unitCode: w.unitCode,
-        meta: w.plan.summary,
+        meta: phase.goal,
       });
+    }
 
-      for (const task of openTasks) {
-        list.push({
-          id: forgeTaskDoneId(w.unitId, w.weekIndex, task.id),
-          title: task.title,
-          date: due,
-          href: w.href,
-          kind: 'forge',
-          unitCode: w.unitCode,
-          meta: `${w.unitCode} · Week ${w.weekIndex}: ${w.weekTitle}`,
-        });
-      }
+    for (const ref of listAllProjectTasks()) {
+      if (state.done[ref.doneId]) continue;
+      list.push({
+        id: ref.doneId,
+        title: ref.task.title,
+        date: new Date(ref.phase.by + 'T23:59:00'),
+        href: ref.href,
+        kind: 'forge',
+        meta: ref.phase.title,
+      });
     }
 
     return list;
@@ -135,11 +116,10 @@ export function CalendarView() {
 
   const monthLabel = cursor.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
-  /** Compact pills on the grid: assessments + weekly + one forge rollup per week (not every task). */
   const gridEvents = useMemo(
     () =>
       events.filter(
-        (e) => e.kind === 'major' || e.kind === 'weekly' || e.id.startsWith('forge-week-'),
+        (e) => e.kind === 'major' || e.kind === 'weekly' || e.id.startsWith('forge-phase-'),
       ),
     [events],
   );
@@ -199,7 +179,7 @@ export function CalendarView() {
                   title={e.meta ? `${e.title} — ${e.meta}` : e.title}
                 >
                   {e.unitCode ? `${e.unitCode} · ` : ''}
-                  {e.kind === 'forge' ? e.title : e.kind === 'weekly' ? e.title : e.title}
+                  {e.title}
                 </span>
               ))}
               {more > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{more} more</span>}

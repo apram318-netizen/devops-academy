@@ -1,40 +1,57 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { useStore } from '../state/store';
 import {
-  FORGE_MILESTONES,
   SQUADFORGE,
-  forgeTaskDoneId,
-  listForgeWeeksForUnit,
+  listProjectPhases,
+  phaseProgress,
+  projectTaskDoneId,
+  resolveConceptLink,
 } from '../data/squadforge';
-import { assessmentsForUnit, getUnit } from '../data/curriculum';
-import { unitProgressPercent } from '../lib/grades';
-import { isDone } from '../lib/completion';
 import { Chip, ProgressRing } from '../components/ui';
+import { renderInlineCode } from '../data/content';
 
-function milestoneReached(by: string): boolean {
-  const today = new Date();
-  const due = new Date(by + 'T23:59:59');
-  return today > due;
+function pastDue(by: string): boolean {
+  return new Date() > new Date(by + 'T23:59:59');
 }
 
-export function ProjectView() {
+export function ProjectView({
+  focusTask,
+  focusPhase,
+}: {
+  focusTask?: string;
+  focusPhase?: string;
+}) {
   const { state, markDone } = useStore();
-  const start = state.prefs.start;
-  const [openUnit, setOpenUnit] = useState<string | null>(FORGE_MILESTONES[0]?.unit ?? null);
+  const phases = listProjectPhases();
+  const [openPhase, setOpenPhase] = useState<string | null>(focusPhase ?? phases[0]?.id ?? null);
+  const [openTask, setOpenTask] = useState<string | null>(focusTask ?? null);
+
+  useEffect(() => {
+    if (focusPhase) setOpenPhase(focusPhase);
+    if (focusTask) {
+      setOpenTask(focusTask);
+      for (const p of phases) {
+        if (p.tasks.some((t) => t.id === focusTask)) {
+          setOpenPhase(p.id);
+          break;
+        }
+      }
+      requestAnimationFrame(() => {
+        document.getElementById(`task-${focusTask}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [focusTask, focusPhase, phases]);
 
   const totals = useMemo(() => {
     let tasks = 0;
     let done = 0;
-    for (const m of FORGE_MILESTONES) {
-      for (const w of listForgeWeeksForUnit(m.unit)) {
-        for (const t of w.plan.tasks) {
-          tasks++;
-          if (state.done[forgeTaskDoneId(w.unitId, w.weekIndex, t.id)]) done++;
-        }
-      }
+    for (const p of phases) {
+      const prog = phaseProgress(p, state.done);
+      tasks += prog.total;
+      done += prog.done;
     }
     return { tasks, done };
-  }, [state.done]);
+  }, [phases, state.done]);
 
   return (
     <div class="page reading">
@@ -46,10 +63,14 @@ export function ProjectView() {
           <div class="stat-value">
             {totals.done}/{totals.tasks}
           </div>
-          <div class="stat-label">Forge tasks done</div>
+          <div class="stat-label">Project tasks done</div>
         </div>
         <div class="stat">
-          <div class="stat-value">{start}</div>
+          <div class="stat-value">{phases.length}</div>
+          <div class="stat-label">Phases</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">{state.prefs.start}</div>
           <div class="stat-label">Program start</div>
         </div>
       </div>
@@ -71,93 +92,93 @@ export function ProjectView() {
       </section>
 
       <section class="section">
-        <h2 class="section-title">Build tracker</h2>
+        <h2 class="section-title">Project timeline</h2>
         <p class="page-sub" style={{ marginTop: 0 }}>
-          Each row is one course week. Open it for the exact commands and files. Check off tasks as you finish them.
+          Real shipping order — not subject order. Each task links to the subject weeks that teach the concepts you need (often several units at once).
         </p>
         <div class="forge-milestones">
-          {FORGE_MILESTONES.map((m) => {
-            const unit = getUnit(m.unit);
-            const past = milestoneReached(m.by);
-            const pct = unit ? unitProgressPercent(state, unit.id) : 0;
-            const assesses = assessmentsForUnit(m.unit);
-            const assessDone = assesses.filter(
-              (a) => isDone(state, a.id) || state.subs[a.id]?.status === 'submitted',
-            ).length;
-            const weeks = listForgeWeeksForUnit(m.unit);
-            const weekTasks = weeks.flatMap((w) =>
-              w.plan.tasks.map((t) => ({ w, t, id: forgeTaskDoneId(w.unitId, w.weekIndex, t.id) })),
-            );
-            const weekDone = weekTasks.filter((x) => state.done[x.id]).length;
-            const expanded = openUnit === m.unit;
-
+          {phases.map((phase) => {
+            const prog = phaseProgress(phase, state.done);
+            const expanded = openPhase === phase.id;
+            const complete = prog.total > 0 && prog.done === prog.total;
+            const overdue = !complete && pastDue(phase.by);
             return (
-              <div class="forge-milestone" key={m.id}>
+              <div class="forge-milestone" key={phase.id} id={`phase-${phase.id}`}>
                 <button
                   type="button"
                   class="forge-milestone-toggle"
-                  onClick={() => setOpenUnit(expanded ? null : m.unit)}
+                  onClick={() => setOpenPhase(expanded ? null : phase.id)}
                   aria-expanded={expanded}
                 >
                   <div class="forge-milestone-head">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <ProgressRing value={pct} total={100} size={44} />
+                      <ProgressRing value={prog.done} total={prog.total || 1} size={44} />
                       <div style={{ textAlign: 'left' }}>
-                        <strong>{m.title}</strong>
+                        <strong>{phase.title}</strong>
                         <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>
-                          {unit ? `${unit.code} · ${unit.name}` : m.unit}
-                          {` · Forge tasks ${weekDone}/${weekTasks.length}`}
-                          {assesses.length > 0 ? ` · assessments ${assessDone}/${assesses.length}` : ''}
+                          {prog.done}/{prog.total} tasks
                         </div>
                       </div>
                     </div>
-                    <Chip tone={weekDone === weekTasks.length && weekTasks.length > 0 ? 'success' : past ? 'warning' : 'info'}>
-                      {weekDone === weekTasks.length && weekTasks.length > 0 ? 'Complete' : m.by}
+                    <Chip tone={complete ? 'success' : overdue ? 'warning' : 'info'}>
+                      {complete ? 'Complete' : phase.by}
                     </Chip>
                   </div>
                 </button>
-                <p style={{ margin: '8px 0', fontSize: 14 }}>{m.doneWhen}</p>
+                <p style={{ margin: '8px 0', fontSize: 14 }}>{phase.goal}</p>
 
                 {expanded && (
                   <div class="forge-week-track">
-                    {weeks.map((w) => {
-                      const tDone = w.plan.tasks.filter((t) =>
-                        state.done[forgeTaskDoneId(w.unitId, w.weekIndex, t.id)],
-                      ).length;
+                    {phase.tasks.map((task) => {
+                      const doneId = projectTaskDoneId(task.id);
+                      const done = Boolean(state.done[doneId]);
+                      const showSteps = openTask === task.id;
                       return (
-                        <div class="forge-week-row" key={`${w.unitId}-${w.weekIndex}`}>
+                        <div
+                          class={`forge-week-row ${done ? 'forge-task-done-row' : ''}`}
+                          key={task.id}
+                          id={`task-${task.id}`}
+                        >
                           <div class="forge-week-row-head">
-                            <div>
-                              <a href={w.href} class="forge-week-link">
-                                {w.unitCode} · Week {w.weekIndex}: {w.weekTitle}
-                              </a>
-                              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{w.plan.summary}</div>
-                            </div>
-                            <Chip tone={tDone === w.plan.tasks.length ? 'success' : 'neutral'}>
-                              {tDone}/{w.plan.tasks.length}
-                            </Chip>
+                            <label class="forge-task-label" style={{ flex: 1 }}>
+                              <input
+                                type="checkbox"
+                                checked={done}
+                                onChange={() => markDone(doneId, !done)}
+                              />
+                              <span class="forge-task-title">{task.title}</span>
+                            </label>
+                            <button
+                              type="button"
+                              class="btn btn-ghost"
+                              style={{ fontSize: 13 }}
+                              onClick={() => setOpenTask(showSteps ? null : task.id)}
+                            >
+                              {showSteps ? 'Hide steps' : 'Show steps'}
+                            </button>
                           </div>
-                          <ul class="forge-track-tasks">
-                            {w.plan.tasks.map((task) => {
-                              const id = forgeTaskDoneId(w.unitId, w.weekIndex, task.id);
-                              const done = Boolean(state.done[id]);
+
+                          <div class="forge-learn-links">
+                            <span class="forge-learn-label">Learn:</span>
+                            {task.links.map((link) => {
+                              const r = resolveConceptLink(link);
+                              if (!r) return null;
                               return (
-                                <li key={task.id}>
-                                  <label>
-                                    <input
-                                      type="checkbox"
-                                      checked={done}
-                                      onChange={() => markDone(id, !done)}
-                                    />
-                                    <span>{task.title}</span>
-                                  </label>
-                                </li>
+                                <a key={`${r.unitId}-${r.weekIndex}-${r.concepts[0]}`} class="forge-learn-chip" href={r.href}>
+                                  {r.unitCode} · W{r.weekIndex} {r.weekTitle}
+                                  <span class="forge-learn-why">{r.concepts.join(' · ')}</span>
+                                </a>
                               );
                             })}
-                          </ul>
-                          <a href={w.href} class="forge-open-week">
-                            Open week for exact steps →
-                          </a>
+                          </div>
+
+                          {showSteps && (
+                            <ol class="forge-step-list">
+                              {task.steps.map((step) => (
+                                <li key={step} dangerouslySetInnerHTML={{ __html: renderInlineCode(step) }} />
+                              ))}
+                            </ol>
+                          )}
                         </div>
                       );
                     })}
@@ -170,12 +191,12 @@ export function ProjectView() {
       </section>
 
       <section class="section">
-        <h2 class="section-title">How to work each week</h2>
+        <h2 class="section-title">How to work</h2>
         <ol>
-          <li>Pick the next unchecked task in this tracker</li>
-          <li>Open the linked course week</li>
-          <li>Follow the numbered SquadForge steps (commands and file paths)</li>
-          <li>Check the task off here or on the week page; submit unit evidence as usual</li>
+          <li>Open the next incomplete phase on this timeline</li>
+          <li>Use <strong>Learn</strong> links to pull concepts from any subject week (order does not have to match units)</li>
+          <li>Follow the exact steps on the task; check it off when done</li>
+          <li>Submit unit assessments as usual — they map to the same product milestones</li>
         </ol>
       </section>
     </div>

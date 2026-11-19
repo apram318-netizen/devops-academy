@@ -1,37 +1,56 @@
-/** SquadForge — on-demand game-server SaaS spine for the curriculum. */
+/** SquadForge — on-demand game-server SaaS spine (project timeline). */
 
-import { FORGE_WEEK_PLANS } from './forgeWeeks';
+import { FORGE_PHASES } from './forgeTimeline';
 import { getUnit } from './curriculum';
 
-export type ForgeMilestone = {
-  id: string;
-  title: string;
-  by: string; // ISO date Sunday deadline
-  unit: string;
-  doneWhen: string;
+export type ConceptLink = {
+  unitId: string;
+  weekIndex: number; // 1-based within unit
+  concepts: string[];
 };
 
+export type ProjectTask = {
+  id: string;
+  title: string;
+  steps: string[];
+  links: ConceptLink[];
+};
+
+export type ProjectPhase = {
+  id: string;
+  title: string;
+  goal: string;
+  by: string; // ISO date
+  tasks: ProjectTask[];
+};
+
+/** @deprecated Unit-linear week plan shape — kept for forgeWeeks.ts typing only */
 export type ForgeTask = {
   id: string;
   title: string;
   steps: string[];
 };
 
+/** @deprecated */
 export type ForgeWeekPlan = {
   summary: string;
   outcome: string;
   tasks: ForgeTask[];
 };
 
-export type ForgeWeekRef = {
-  unitId: string;
+export type ResolvedConceptLink = ConceptLink & {
   unitCode: string;
-  unitName: string;
-  weekIndex: number; // 1-based within unit
-  programWeek: number; // hash route week number
   weekTitle: string;
   href: string;
-  plan: ForgeWeekPlan;
+  programWeek: number;
+};
+
+export type ProjectTaskRef = {
+  phase: ProjectPhase;
+  task: ProjectTask;
+  doneId: string;
+  href: string;
+  resolvedLinks: ResolvedConceptLink[];
 };
 
 export const SQUADFORGE = {
@@ -46,109 +65,75 @@ export const SQUADFORGE = {
   language: 'Go (control plane). Shell for host labs. Game binary = upstream dedicated-server image.',
 };
 
-export const FORGE_MILESTONES: ForgeMilestone[] = [
-  {
-    id: 'm-host',
-    title: 'Host bootstrap + health agent',
-    by: '2026-12-13',
-    unit: 'dev101',
-    doneWhen: 'Linux node can run Forge helpers; health script ready for game-host monitoring',
-  },
-  {
-    id: 'm-net',
-    title: 'Join path + TLS edge design',
-    by: '2027-01-03',
-    unit: 'dev102',
-    doneWhen: 'Network design for tenant servers + local TLS reverse proxy in front of control API',
-  },
-  {
-    id: 'm-compose',
-    title: 'Compose MVP (start/stop one game)',
-    by: '2027-01-24',
-    unit: 'dev103',
-    doneWhen: 'docker compose up runs API, orchestrator, Postgres, Redis, and one game image; forgectl start/stop works',
-  },
-  {
-    id: 'm-aws',
-    title: 'AWS foundation for Forge',
-    by: '2027-02-14',
-    unit: 'dev104',
-    doneWhen: 'VPC/IAM/ECR/S3/RDS plan applied or staged; cost alarms on',
-  },
-  {
-    id: 'm-k8s',
-    title: 'Game servers on kind → EKS path',
-    by: '2027-03-07',
-    unit: 'dev201',
-    doneWhen: 'Forge deploys on kind; tenant server pods get join endpoints; EKS path documented',
-  },
-  {
-    id: 'm-tf',
-    title: 'Platform as code',
-    by: '2027-03-28',
-    unit: 'dev202',
-    doneWhen: 'Terraform brings up VPC+EKS skeleton; workspaces for dev/staging/prod',
-  },
-  {
-    id: 'm-gitops',
-    title: 'CI + GitOps delivery',
-    by: '2027-04-18',
-    unit: 'dev203',
-    doneWhen: 'Merge builds/scans/pushes images; Argo CD syncs Forge; canary for control plane',
-  },
-  {
-    id: 'm-sre',
-    title: 'SLOs, billing hooks, game day',
-    by: '2027-05-09',
-    unit: 'dev204',
-    doneWhen: 'Dashboards+alerts; metering/quotas; game-day report on Forge',
-  },
-  {
-    id: 'm-capstone',
-    title: 'Industry-complete portfolio',
-    by: '2027-06-20',
-    unit: 'dev301',
-    doneWhen: 'One-command bootstrap, failure portfolio, demo: start → join → idle stop → invoice',
-  },
-];
-
-export function forgeTaskDoneId(unitId: string, weekIndex1Based: number, taskId: string): string {
-  return `forge:${unitId}:w${weekIndex1Based}:${taskId}`;
+export function listProjectPhases(): ProjectPhase[] {
+  return FORGE_PHASES;
 }
 
-export function getForgeWeekPlan(unitId: string, weekIndex1Based: number): ForgeWeekPlan | null {
-  const list = FORGE_WEEK_PLANS[unitId];
-  if (!list?.length) return null;
-  const idx = Math.max(1, weekIndex1Based) - 1;
-  return list[Math.min(idx, list.length - 1)] ?? null;
+export function projectTaskDoneId(taskId: string): string {
+  return `forge:task:${taskId}`;
 }
 
-/** @deprecated Prefer getForgeWeekPlan — kept for any residual string callers */
-export function squadForgeApply(unitId: string, weekIndex1Based: number): string {
-  const plan = getForgeWeekPlan(unitId, weekIndex1Based);
-  return plan?.summary ?? 'Advance SquadForge with a concrete change in the monorepo this week (PR + evidence).';
-}
-
-export function listForgeWeeksForUnit(unitId: string): ForgeWeekRef[] {
+export function conceptWeekHref(unitId: string, weekIndex1Based: number): string {
   const unit = getUnit(unitId);
-  const plans = FORGE_WEEK_PLANS[unitId];
-  if (!unit || !plans) return [];
-  return plans.map((plan, i) => {
-    const weekIndex = i + 1;
-    const programWeek = unit.start + i;
-    return {
-      unitId,
-      unitCode: unit.code,
-      unitName: unit.name,
-      weekIndex,
-      programWeek,
-      weekTitle: unit.weeks[i]?.t ?? `Week ${weekIndex}`,
-      href: `#/course/${unitId}/week/${programWeek}`,
-      plan,
-    };
-  });
+  if (!unit) return '#/courses';
+  const programWeek = unit.start + weekIndex1Based - 1;
+  return `#/course/${unitId}/week/${programWeek}`;
 }
 
-export function listAllForgeWeeks(): ForgeWeekRef[] {
-  return FORGE_MILESTONES.flatMap((m) => listForgeWeeksForUnit(m.unit));
+export function resolveConceptLink(link: ConceptLink): ResolvedConceptLink | null {
+  const unit = getUnit(link.unitId);
+  if (!unit) return null;
+  const week = unit.weeks[link.weekIndex - 1];
+  if (!week) return null;
+  const programWeek = unit.start + link.weekIndex - 1;
+  return {
+    ...link,
+    unitCode: unit.code,
+    weekTitle: week.t,
+    programWeek,
+    href: `#/course/${link.unitId}/week/${programWeek}`,
+  };
+}
+
+export function getProjectTask(taskId: string): ProjectTaskRef | null {
+  for (const phase of FORGE_PHASES) {
+    const task = phase.tasks.find((t) => t.id === taskId);
+    if (!task) continue;
+    return {
+      phase,
+      task,
+      doneId: projectTaskDoneId(task.id),
+      href: `#/project?task=${encodeURIComponent(task.id)}`,
+      resolvedLinks: task.links.map(resolveConceptLink).filter((x): x is ResolvedConceptLink => Boolean(x)),
+    };
+  }
+  return null;
+}
+
+export function listAllProjectTasks(): ProjectTaskRef[] {
+  return FORGE_PHASES.flatMap((phase) =>
+    phase.tasks.map((task) => ({
+      phase,
+      task,
+      doneId: projectTaskDoneId(task.id),
+      href: `#/project?task=${encodeURIComponent(task.id)}`,
+      resolvedLinks: task.links.map(resolveConceptLink).filter((x): x is ResolvedConceptLink => Boolean(x)),
+    })),
+  );
+}
+
+/** Project tasks that pull concepts from this subject week (reverse index). */
+export function projectTasksForUnitWeek(unitId: string, weekIndex1Based: number): ProjectTaskRef[] {
+  return listAllProjectTasks().filter((ref) =>
+    ref.task.links.some((l) => l.unitId === unitId && l.weekIndex === weekIndex1Based),
+  );
+}
+
+export function phaseProgress(
+  phase: ProjectPhase,
+  doneMap: Record<string, number | boolean | undefined>,
+): { done: number; total: number } {
+  const total = phase.tasks.length;
+  const done = phase.tasks.filter((t) => Boolean(doneMap[projectTaskDoneId(t.id)])).length;
+  return { done, total };
 }

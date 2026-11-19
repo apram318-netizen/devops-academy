@@ -12,7 +12,7 @@ export type Route =
   | { name: 'grades' }
   | { name: 'calendar' }
   | { name: 'settings' }
-  | { name: 'project' }
+  | { name: 'project'; task?: string; phase?: string }
   | { name: 'programWeek'; week: number }
   | { name: 'notFound' };
 
@@ -26,7 +26,14 @@ export function parseHash(hash = location.hash): Route {
   if (parts[0] === 'grades') return { name: 'grades' };
   if (parts[0] === 'calendar') return { name: 'calendar' };
   if (parts[0] === 'settings') return { name: 'settings' };
-  if (parts[0] === 'project') return { name: 'project' };
+  if (parts[0] === 'project') {
+    const qs = raw.includes('?') ? new URLSearchParams(raw.split('?')[1]) : null;
+    return {
+      name: 'project',
+      task: qs?.get('task') ?? undefined,
+      phase: qs?.get('phase') ?? undefined,
+    };
+  }
 
   if (parts[0] === 'week' && parts[1]) {
     return { name: 'programWeek', week: Number(parts[1]) };

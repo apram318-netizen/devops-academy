@@ -1,84 +1,85 @@
 import { useStore } from '../state/store';
-import {
-  forgeTaskDoneId,
-  getForgeWeekPlan,
-  type ForgeWeekPlan,
-} from '../data/squadforge';
+import { projectTasksForUnitWeek } from '../data/squadforge';
 import { renderInlineCode } from '../data/content';
 import { Chip, DoneTick } from './ui';
 
 export function ForgeWeekPanel({
   unitId,
   weekIndex1Based,
-  compact,
 }: {
   unitId: string;
   weekIndex1Based: number;
-  /** Tracker-style: titles + link only; full steps live on the week page */
   compact?: boolean;
 }) {
   const { state, markDone } = useStore();
-  const plan = getForgeWeekPlan(unitId, weekIndex1Based);
-  if (!plan) return null;
+  const refs = projectTasksForUnitWeek(unitId, weekIndex1Based);
 
-  const doneCount = plan.tasks.filter((t) =>
-    Boolean(state.done[forgeTaskDoneId(unitId, weekIndex1Based, t.id)]),
-  ).length;
+  if (!refs.length) {
+    return (
+      <div class="forge-week-panel">
+        <p class="forge-week-summary" style={{ color: 'var(--text-muted)' }}>
+          No SquadForge project tasks pull this week yet as a primary concept link. Study the notes and books —
+          later timeline phases will reuse these skills.
+        </p>
+        <p style={{ fontSize: 14 }}>
+          <a href="#/project">Open project timeline →</a>
+        </p>
+      </div>
+    );
+  }
+
+  const doneCount = refs.filter((r) => Boolean(state.done[r.doneId])).length;
 
   return (
-    <div class={`forge-week-panel ${compact ? 'compact' : ''}`}>
+    <div class="forge-week-panel">
       <div class="forge-week-panel-head">
-        <p class="forge-week-summary">{plan.summary}</p>
-        <Chip tone={doneCount === plan.tasks.length ? 'success' : 'info'}>
-          {doneCount}/{plan.tasks.length} tasks
+        <p class="forge-week-summary">
+          Project work that uses this week’s concepts (from the SquadForge timeline — not unit order).
+        </p>
+        <Chip tone={doneCount === refs.length ? 'success' : 'info'}>
+          {doneCount}/{refs.length} linked tasks
         </Chip>
       </div>
-      <p class="forge-week-outcome">
-        <strong>Done when:</strong> {plan.outcome}
+      <p style={{ fontSize: 14, marginBottom: 12 }}>
+        <a href="#/project">Open full project timeline →</a>
       </p>
       <ol class="forge-task-list">
-        {plan.tasks.map((task, i) => {
-          const id = forgeTaskDoneId(unitId, weekIndex1Based, task.id);
-          const done = Boolean(state.done[id]);
+        {refs.map((ref) => {
+          const done = Boolean(state.done[ref.doneId]);
+          const why =
+            ref.task.links.find((l) => l.unitId === unitId && l.weekIndex === weekIndex1Based)?.concepts ??
+            [];
           return (
-            <li key={task.id} class={`forge-task ${done ? 'done' : ''}`}>
+            <li key={ref.task.id} class={`forge-task ${done ? 'done' : ''}`} id={`week-task-${ref.task.id}`}>
               <label class="forge-task-label">
                 <input
                   type="checkbox"
                   checked={done}
-                  onChange={() => markDone(id, !done)}
+                  onChange={() => markDone(ref.doneId, !done)}
                 />
                 <span class="forge-task-title">
-                  {i + 1}. {task.title}
+                  {ref.task.title}
                   {done ? <DoneTick /> : null}
                 </span>
               </label>
-              {!compact && (
-                <ol class="forge-step-list">
-                  {task.steps.map((step) => (
-                    <li
-                      key={step}
-                      dangerouslySetInnerHTML={{ __html: renderInlineCode(step) }}
-                    />
-                  ))}
-                </ol>
-              )}
+              <div class="forge-week-meta">
+                <Chip tone="neutral">{ref.phase.title}</Chip>
+                {why.length > 0 && (
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Uses: {why.join(' · ')}</span>
+                )}
+              </div>
+              <ol class="forge-step-list">
+                {ref.task.steps.map((step) => (
+                  <li key={step} dangerouslySetInnerHTML={{ __html: renderInlineCode(step) }} />
+                ))}
+              </ol>
+              <p style={{ fontSize: 13, marginBottom: 0 }}>
+                <a href={`#/project?task=${encodeURIComponent(ref.task.id)}`}>Open on project timeline →</a>
+              </p>
             </li>
           );
         })}
       </ol>
     </div>
-  );
-}
-
-export function ForgeWeekPreview({ plan }: { plan: ForgeWeekPlan }) {
-  return (
-    <ul class="forge-task-titles">
-      {plan.tasks.map((t, i) => (
-        <li key={t.id}>
-          {i + 1}. {t.title}
-        </li>
-      ))}
-    </ul>
   );
 }

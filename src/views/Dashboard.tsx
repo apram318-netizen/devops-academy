@@ -116,6 +116,16 @@ export function Dashboard() {
       </div>
 
       <section class="section">
+        <a class="card card-link" href="#/project" style={{ display: 'block', padding: 16 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Spine project</div>
+          <div style={{ fontWeight: 700, fontSize: 18 }}>SquadForge</div>
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>
+            On-demand game-server SaaS — milestones, stack, and weekly apply steps
+          </div>
+        </a>
+      </section>
+
+      <section class="section">
         <h2 class="section-title">This week</h2>
         <div class="unit-week-cards">
           {thisWeekUnits.map(({ unit, week: w, done, total, next, gw }) => (

@@ -33,6 +33,8 @@ export type PageProgress = {
   sec: number;
   end: boolean;
   ans: string[];
+  /** YouTube video ids marked watched for this notes activity */
+  watched?: string[];
 };
 
 export type Prefs = {

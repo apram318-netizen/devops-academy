@@ -106,18 +106,20 @@ export function renderInlineCode(text: string): string {
 export function weekOverview(week: Week): string {
   const topics = splitTopics(week.topics);
   const focus = topics.slice(0, 3).join(', ');
-  return `This week you focus on ${focus || week.t}. Work through the notes first, then the lab, then check yourself with the quiz. Aim to finish evidence before Sunday 11:59 PM.`;
+  return `This week you focus on ${focus || week.t}. Read notes and watch this week’s videos, ship the SquadForge apply step in the lab, then quiz yourself. Finish evidence before Sunday 11:59 PM.`;
 }
 
 export function studyPlan(week: Week): string[] {
   const hours = estimateHours(week);
-  const read = Math.max(2, Math.round(hours * 0.35));
-  const lab = Math.max(2, Math.round(hours * 0.45));
-  const quiz = Math.max(1, hours - read - lab);
+  const read = Math.max(2, Math.round(hours * 0.3));
+  const watch = Math.max(1, Math.round(hours * 0.15));
+  const lab = Math.max(2, Math.round(hours * 0.4));
+  const quiz = Math.max(1, hours - read - watch - lab);
   return [
-    `Day 1 to 2: read the notes and try every command (${read} hours)`,
-    `Day 3 to 5: complete the lab, break it, fix it, and write evidence (${lab} hours)`,
-    `Day 6 to 7: finish self-check answers and take the quiz (${quiz} hours)`,
+    `Day 1: read notes + unit books (${read} hours)`,
+    `Day 1 to 2: watch this week’s videos and skim concept reads (${watch} hours)`,
+    `Day 3 to 5: lab that advances SquadForge — break it, fix it, evidence (${lab} hours)`,
+    `Day 6 to 7: self-check + quiz (${quiz} hours)`,
   ];
 }
 
@@ -194,12 +196,13 @@ export function labBrief(labTitle: string, week: Week, isScenario: boolean): {
     };
   }
   return {
-    summary: `Complete this hands-on lab: ${labTitle}. Work in your lab folder, capture real output, and submit evidence here before the Sunday deadline.`,
+    summary: `Complete this hands-on lab: ${labTitle}. Point the work at SquadForge where you can (see SquadForge this week), capture real output, and submit evidence before Sunday.`,
     deliverables: [
       'Working solution that matches the lab goal',
       'Evidence files (terminal output, screenshots or short demo clip)',
+      'Short note on how this advances SquadForge',
       'README with what you did, what broke, and how you fixed it',
-      'Optional: repo link in the online text box',
+      'Optional: repo / PR link in the online text box',
     ],
     tips: [
       ...week.notes.slice(0, 3),

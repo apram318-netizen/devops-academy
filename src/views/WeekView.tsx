@@ -1,7 +1,7 @@
 import { useMemo } from 'preact/hooks';
 import { useStore } from '../state/store';
 import { getUnit } from '../data/curriculum';
-import { activitiesForWeek, activityHref, unitWeekIndex } from '../lib/activities';
+import { activitiesForWeek, activityHref, notesId, unitWeekIndex } from '../lib/activities';
 import {
   estimateHours,
   labBrief,
@@ -11,6 +11,8 @@ import {
   studyResources,
   weekOverview,
 } from '../data/content';
+import { getWeekMedia } from '../data/weekMedia';
+import { squadForgeApply } from '../data/squadforge';
 import { formatLongDateTime, formatWeekRange, relativeDue, weekEnd, weekStart } from '../lib/dates';
 import { activityComplete, quizBestScore } from '../lib/completion';
 import { computeNextStep, defaultStepCount } from '../lib/nextStep';
@@ -23,6 +25,7 @@ import {
   ProgressRing,
   RowChevron,
 } from '../components/ui';
+import { YouTubeEmbed } from '../components/YouTubeEmbed';
 import {
   Award,
   BookOpen,
@@ -85,8 +88,11 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
   const outcomes = useMemo(() => learningOutcomes(w), [w]);
   const plan = useMemo(() => studyPlan(w), [w]);
   const resources = useMemo(() => studyResources(unit, w), [unit, w]);
+  const media = useMemo(() => getWeekMedia(unit.id, idx + 1), [unit.id, idx]);
+  const forge = useMemo(() => squadForgeApply(unit.id, idx + 1), [unit.id, idx]);
   const hours = estimateHours(w);
   const overview = weekOverview(w);
+  const watched = new Set(state.page[notesId(unit.id, week)]?.watched ?? []);
 
   return (
     <div class="page">
@@ -157,6 +163,14 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
       </section>
 
       <section class="week-panel">
+        <h2 class="week-panel-title">SquadForge this week</h2>
+        <p class="week-panel-body">{forge}</p>
+        <p class="week-panel-meta">
+          <a href="#/project">Open SquadForge tracker →</a>
+        </p>
+      </section>
+
+      <section class="week-panel">
         <h2 class="week-panel-title">Learning outcomes</h2>
         <ul class="week-list">
           {outcomes.map((o) => (
@@ -182,6 +196,35 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
           ))}
         </ol>
       </section>
+
+      {media && (
+        <section class="week-panel">
+          <h2 class="week-panel-title">Watch this week</h2>
+          <p class="week-panel-body" style={{ marginBottom: 12 }}>
+            Concept focus: {media.concepts.join(' · ')}
+          </p>
+          {media.videos.map((video) => (
+            <YouTubeEmbed key={video.youtubeId + (video.startSeconds ?? 0)} video={video} watched={watched.has(video.youtubeId)} />
+          ))}
+          {media.reads.length > 0 && (
+            <div class="resource-list" style={{ marginTop: 12 }}>
+              {media.reads.map((r) => (
+                <a key={r.url} class="resource-row" href={r.url} target="_blank" rel="noreferrer">
+                  <div>
+                    <div class="resource-title">
+                      {r.title} <ExternalLink size={14} strokeWidth={1.75} />
+                    </div>
+                    <div class="resource-why">{r.why}</div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+          <p class="week-panel-meta" style={{ marginTop: 12 }}>
+            Mark videos watched in <a href={`#/course/${unit.id}/week/${week}/notes`}>Notes</a>.
+          </p>
+        </section>
+      )}
 
       <section class="section" style={{ marginBottom: 32 }}>
         <h2 class="section-title">Activities</h2>
@@ -256,9 +299,9 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
       </section>
 
       <section class="week-panel">
-        <h2 class="week-panel-title">Study resources</h2>
+        <h2 class="week-panel-title">Unit books &amp; resources</h2>
         <p class="week-panel-body" style={{ marginBottom: 12 }}>
-          Use these while you study. Open them in a new tab; your progress stays in this app.
+          Core books and links for this unit. Week videos are above under Watch this week.
         </p>
         <div class="resource-list">
           {resources.map((r) => (

@@ -11,9 +11,12 @@ import {
   studyResources,
   weekOverview,
 } from '../data/content';
+import { getWeekMedia } from '../data/weekMedia';
+import { squadForgeApply } from '../data/squadforge';
 import { formatWeekRange, weekEnd, weekStart } from '../lib/dates';
 import { isDone, notesAutoComplete, notesConditions } from '../lib/completion';
 import { Breadcrumb, Button, Chip, DoneTick, OverflowMenu } from '../components/ui';
+import { YouTubeEmbed } from '../components/YouTubeEmbed';
 import { downloadText } from '../storage/backup';
 
 export function NotesView({ unitId, week }: { unitId: string; week: number }) {
@@ -33,8 +36,11 @@ export function NotesView({ unitId, week }: { unitId: string; week: number }) {
   const resources = useMemo(() => studyResources(unit, w), [unit, w]);
   const plan = useMemo(() => studyPlan(w), [w]);
   const overview = weekOverview(w);
-  const page = state.page[id] ?? { sec: 0, end: false, ans: questions.map(() => '') };
+  const media = useMemo(() => getWeekMedia(unit.id, idx + 1), [unit.id, idx]);
+  const forge = useMemo(() => squadForgeApply(unit.id, idx + 1), [unit.id, idx]);
+  const page = state.page[id] ?? { sec: 0, end: false, ans: questions.map(() => ''), watched: [] };
   const ans = [...questions.map((_, i) => page.ans[i] ?? '')];
+  const watched = new Set(page.watched ?? []);
   const conds = notesConditions(state, id, questions.length);
   const done = isDone(state, id);
   const canAuto = notesAutoComplete(state, id);
@@ -161,6 +167,9 @@ export function NotesView({ unitId, week }: { unitId: string; week: number }) {
             ))}
           </ul>
 
+          <h2>SquadForge this week</h2>
+          <p>{forge}</p>
+
           <h2>Study plan</h2>
           <ol>
             {plan.map((p) => (
@@ -168,7 +177,44 @@ export function NotesView({ unitId, week }: { unitId: string; week: number }) {
             ))}
           </ol>
 
-          <h2>Study resources</h2>
+          {media && (
+            <>
+              <h2>Watch this week</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+                Concept focus: {media.concepts.join(' · ')}
+              </p>
+              {media.videos.map((video) => (
+                <YouTubeEmbed
+                  key={video.youtubeId + (video.startSeconds ?? 0)}
+                  video={video}
+                  watched={watched.has(video.youtubeId)}
+                  onWatched={() => {
+                    const next = new Set(watched);
+                    next.add(video.youtubeId);
+                    updatePage(id, { watched: [...next] });
+                  }}
+                />
+              ))}
+              {media.reads.length > 0 && (
+                <>
+                  <h3>Concept reads</h3>
+                  <ul>
+                    {media.reads.map((r) => (
+                      <li key={r.url}>
+                        <a href={r.url} target="_blank" rel="noreferrer">
+                          {r.title}
+                        </a>
+                        {' — '}
+                        {r.why}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
+
+          <h2>Unit books &amp; resources</h2>
           <ul>
             {resources.map((r) => (
               <li key={r.url}>

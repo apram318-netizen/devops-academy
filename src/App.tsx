@@ -13,6 +13,7 @@ import { AllGrades, UnitGrades } from './views/Grades';
 import { GuideView } from './views/Guide';
 import { CalendarView } from './views/Calendar';
 import { Settings } from './views/Settings';
+import { ProjectView } from './views/Project';
 import { PassphraseGate } from './components/PassphraseGate';
 
 function Router() {
@@ -77,6 +78,9 @@ function Router() {
       break;
     case 'settings':
       view = <Settings />;
+      break;
+    case 'project':
+      view = <ProjectView />;
       break;
     default:
       view = (

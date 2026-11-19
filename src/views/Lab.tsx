@@ -3,6 +3,7 @@ import { useStore } from '../state/store';
 import { getUnit } from '../data/curriculum';
 import { isCapstoneScenarioWeek, labId, unitWeekIndex } from '../lib/activities';
 import { labBrief, labSteps, studyResources, whatToSubmitLab } from '../data/content';
+import { squadForgeApply } from '../data/squadforge';
 import { earlyOrLate, formatLongDateTime, weekEnd } from '../lib/dates';
 import { isDone, labAutoComplete, labConditions } from '../lib/completion';
 import {
@@ -255,6 +256,12 @@ export function LabView({
         <div class="prose">
           <h2>Brief</h2>
           <p>{brief.summary}</p>
+
+          <h2>SquadForge this week</h2>
+          <p>{squadForgeApply(unit.id, idx + 1)}</p>
+          <p style={{ fontSize: 14 }}>
+            <a href="#/project">Open SquadForge tracker →</a>
+          </p>
 
           {cloudCost && (
             <p style={{ color: 'var(--warning)' }}>

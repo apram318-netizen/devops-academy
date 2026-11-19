@@ -9,6 +9,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Rocket,
   Settings as SettingsIcon,
 } from 'lucide-preact';
 import { useStore } from '../state/store';
@@ -41,6 +42,8 @@ function routeTitle(route: Route): string {
       return 'Grades';
     case 'settings':
       return 'Settings';
+    case 'project':
+      return 'SquadForge';
     case 'programWeek':
       return `Week ${route.week}`;
     case 'course':
@@ -108,6 +111,7 @@ export function AppShell({
       icon: BookOpen,
       active: route.name === 'courses' || inCourse,
     },
+    { href: '#/project', label: 'SquadForge', icon: Rocket, active: route.name === 'project' },
     { href: '#/calendar', label: 'Calendar', icon: CalendarDays, active: route.name === 'calendar' },
     { href: '#/grades', label: 'Grades', icon: GraduationCap, active: route.name === 'grades' },
     { href: '#/settings', label: 'Preferences', icon: SettingsIcon, active: route.name === 'settings' },

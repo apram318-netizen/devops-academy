@@ -1771,12 +1771,131 @@ code {
   border-radius: 12px;
   background: var(--surface);
 }
+.forge-milestone-toggle {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
 .forge-milestone-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 4px;
+}
+.forge-week-track {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.forge-week-row {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-muted, rgba(127, 127, 127, 0.08));
+}
+.forge-week-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.forge-week-link {
+  font-weight: 600;
+  text-decoration: none;
+}
+.forge-week-link:hover {
+  text-decoration: underline;
+}
+.forge-track-tasks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.forge-track-tasks li {
+  margin: 0;
+}
+.forge-track-tasks label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+.forge-open-week {
+  font-size: 13px;
+}
+
+.forge-week-panel {
+  margin: 8px 0 16px;
+}
+.forge-week-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.forge-week-summary {
+  margin: 0 0 8px;
+  flex: 1;
+}
+.forge-week-outcome {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.forge-task-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.forge-task {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.forge-task.done {
+  opacity: 0.85;
+}
+.forge-task-label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  font-weight: 600;
+}
+.forge-task-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.forge-step-list {
+  margin: 10px 0 0 1.5rem;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.forge-step-list li {
+  margin-bottom: 6px;
+}
+.forge-step-list code {
+  font-size: 0.92em;
 }
 
 @media (prefers-reduced-motion: reduce) {

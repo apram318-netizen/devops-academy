@@ -12,7 +12,6 @@ import {
   weekOverview,
 } from '../data/content';
 import { getWeekMedia } from '../data/weekMedia';
-import { squadForgeApply } from '../data/squadforge';
 import { formatLongDateTime, formatWeekRange, relativeDue, weekEnd, weekStart } from '../lib/dates';
 import { activityComplete, quizBestScore } from '../lib/completion';
 import { computeNextStep, defaultStepCount } from '../lib/nextStep';
@@ -26,6 +25,7 @@ import {
   RowChevron,
 } from '../components/ui';
 import { YouTubeEmbed } from '../components/YouTubeEmbed';
+import { ForgeWeekPanel } from '../components/ForgeWeekPanel';
 import {
   Award,
   BookOpen,
@@ -89,7 +89,6 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
   const plan = useMemo(() => studyPlan(w), [w]);
   const resources = useMemo(() => studyResources(unit, w), [unit, w]);
   const media = useMemo(() => getWeekMedia(unit.id, idx + 1), [unit.id, idx]);
-  const forge = useMemo(() => squadForgeApply(unit.id, idx + 1), [unit.id, idx]);
   const hours = estimateHours(w);
   const overview = weekOverview(w);
   const watched = new Set(state.page[notesId(unit.id, week)]?.watched ?? []);
@@ -164,10 +163,10 @@ export function WeekView({ unitId, week }: { unitId: string; week: number }) {
 
       <section class="week-panel">
         <h2 class="week-panel-title">SquadForge this week</h2>
-        <p class="week-panel-body">{forge}</p>
-        <p class="week-panel-meta">
+        <p class="week-panel-meta" style={{ marginBottom: 12 }}>
           <a href="#/project">Open SquadForge tracker →</a>
         </p>
+        <ForgeWeekPanel unitId={unit.id} weekIndex1Based={idx + 1} />
       </section>
 
       <section class="week-panel">

@@ -3,7 +3,6 @@ import { useStore } from '../state/store';
 import { getUnit } from '../data/curriculum';
 import { isCapstoneScenarioWeek, labId, unitWeekIndex } from '../lib/activities';
 import { labBrief, labSteps, studyResources, whatToSubmitLab } from '../data/content';
-import { squadForgeApply } from '../data/squadforge';
 import { earlyOrLate, formatLongDateTime, weekEnd } from '../lib/dates';
 import { isDone, labAutoComplete, labConditions } from '../lib/completion';
 import {
@@ -15,6 +14,7 @@ import {
   FileDrop,
   OverflowMenu,
 } from '../components/ui';
+import { ForgeWeekPanel } from '../components/ForgeWeekPanel';
 import { downloadText } from '../storage/backup';
 import type { FileRef } from '../state/types';
 import { ExternalLink } from 'lucide-preact';
@@ -258,10 +258,10 @@ export function LabView({
           <p>{brief.summary}</p>
 
           <h2>SquadForge this week</h2>
-          <p>{squadForgeApply(unit.id, idx + 1)}</p>
           <p style={{ fontSize: 14 }}>
             <a href="#/project">Open SquadForge tracker →</a>
           </p>
+          <ForgeWeekPanel unitId={unit.id} weekIndex1Based={idx + 1} />
 
           {cloudCost && (
             <p style={{ color: 'var(--warning)' }}>

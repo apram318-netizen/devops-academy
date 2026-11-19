@@ -1,0 +1,2587 @@
+{
+  "plans": {
+    "dev102": [
+      {
+        "summary": "Draw Forge network zones and prove L2/L3 basics on lab VMs.",
+        "outcome": "Zone diagram + ARP/IP evidence committed.",
+        "tasks": [
+          {
+            "id": "dirs",
+            "title": "Create network docs folder",
+            "steps": [
+              "From repo root: `mkdir -p docs/network`",
+              "Create empty `docs/network/README.md` with one line: \"SquadForge network design\""
+            ]
+          },
+          {
+            "id": "zones",
+            "title": "Draw control-plane vs game-traffic zones",
+            "steps": [
+              "Create `docs/network/zones.md`",
+              "Add a Mermaid or ASCII diagram with three paths: (1) Player → join DNS/port → game host (2) Operator → TLS → API (3) API → orchestrator → game host",
+              "Under the diagram, a table: Flow | Protocol | Port | Trust boundary"
+            ]
+          },
+          {
+            "id": "lab-arp",
+            "title": "Capture ARP/IP on lab VMs",
+            "steps": [
+              "On VM A and VM B run: `ip -br a`, `ip route`, `ip neigh`",
+              "Save both outputs to `docs/network/lab-l2l3.txt` with headings ## VM-A / ## VM-B",
+              "Write 3 bullets: which interface is LAN, default route, and one neighbour MAC"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Allocate CIDRs for Forge envs — becomes the Terraform VPC later.",
+        "outcome": "CIDR table with no overlaps and ≥50% free.",
+        "tasks": [
+          {
+            "id": "template",
+            "title": "Create the CIDR table file",
+            "steps": [
+              "Create `docs/network/cidr-table.md` with columns: Env, AZ, Tier (public/private/game/db), CIDR, Usable hosts, Notes"
+            ]
+          },
+          {
+            "id": "fill",
+            "title": "Fill 10.0.0.0/16 without overlaps",
+            "steps": [
+              "Allocate for dev, staging, prod × 3 AZs × 4 tiers",
+              "Leave ≥50% of the /16 unallocated; add a VPN/lab reservation row",
+              "Double-check with a second pass that no two rows overlap"
+            ]
+          },
+          {
+            "id": "quiz",
+            "title": "Prove subnetting speed",
+            "steps": [
+              "Complete a timed subnetting drill; record score ≥90% in `docs/network/cidr-table.md` under ## Quiz evidence"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network/cidr-table.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Separate control-API ports from game ports; practise ss.",
+        "outcome": "Port matrix + ss evidence for a listener.",
+        "tasks": [
+          {
+            "id": "ports",
+            "title": "Write the port matrix",
+            "steps": [
+              "Create `docs/network/ports.md` listing: edge 443/tcp, API 8080/tcp, metrics 9090/tcp internal, game 25565/tcp (or your game), SSH 22 bastion-only"
+            ]
+          },
+          {
+            "id": "listener",
+            "title": "Start a lab listener",
+            "steps": [
+              "Run `python3 -m http.server 8080` (or nc) in one terminal",
+              "In another: `ss -tulpn | tee docs/network/ss-listeners.txt`",
+              "Highlight the 8080 line in the file with a comment `# Forge API stand-in`"
+            ]
+          },
+          {
+            "id": "map-check",
+            "title": "Cross-check ports vs zones",
+            "steps": [
+              "Add a section to ports.md mapping each port to a zone from zones.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network/ports.md docs/network/ss-listeners.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Design join DNS and practise dig/hosts.",
+        "outcome": "DNS design + dig evidence for two fake sessions.",
+        "tasks": [
+          {
+            "id": "dns-doc",
+            "title": "Write join DNS design",
+            "steps": [
+              "Create `docs/network/join-dns.md` with pattern `<session>.play.squadforge.local`",
+              "State TTL recommendation for short-lived servers (e.g. 60s)",
+              "Note future Route 53 / split-horizon"
+            ]
+          },
+          {
+            "id": "hosts",
+            "title": "Add two lab names",
+            "steps": [
+              "Add to `/etc/hosts` (or dnsmasq): `session1.play.squadforge.local` and `session2.play.squadforge.local` pointing at a lab IP"
+            ]
+          },
+          {
+            "id": "dig",
+            "title": "Prove resolution",
+            "steps": [
+              "Run `getent hosts session1.play.squadforge.local` and `dig +short session1.play.squadforge.local` if dig exists",
+              "Save to `docs/network/dig-join.txt`"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network/join-dns.md docs/network/dig-join.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "HTTP edge for control API with clear status codes.",
+        "outcome": "Route map + nginx/Caddy stub + curl evidence.",
+        "tasks": [
+          {
+            "id": "routes",
+            "title": "Define HTTP routes file",
+            "steps": [
+              "mkdir -p docs/api && create `docs/api/http-routes.md`",
+              "List: POST /v1/servers → 201, GET /v1/servers/{id} → 200/404, POST .../stop → 200/409, GET /healthz → 200, overload → 503"
+            ]
+          },
+          {
+            "id": "nginx",
+            "title": "Add reverse proxy config",
+            "steps": [
+              "mkdir -p deploy/compose/edge",
+              "Create `deploy/compose/edge/nginx.conf` proxy_pass to 127.0.0.1:8080 with /healthz location"
+            ]
+          },
+          {
+            "id": "curl",
+            "title": "Curl the stub",
+            "steps": [
+              "Start a tiny upstream (or the Go API if ready) and nginx",
+              "curl -i each route; save to `docs/api/curl-http.txt`"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/api deploy/compose/edge",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "TLS for the control API with your own lab CA.",
+        "outcome": "HTTPS works with trusted CA; game ports not TLS-terminated here.",
+        "tasks": [
+          {
+            "id": "script",
+            "title": "Write cert generation script",
+            "steps": [
+              "Create `scripts/gen-lab-certs.sh` that outputs CA + api.squadforge.local cert under `deploy/certs/`",
+              "chmod +x and run it"
+            ]
+          },
+          {
+            "id": "trust",
+            "title": "Trust the CA on your client OS",
+            "steps": [
+              "Document exact trust steps in `docs/network/tls-scope.md`",
+              "State clearly: game traffic stays on dedicated ports (not this TLS edge)"
+            ]
+          },
+          {
+            "id": "https",
+            "title": "Enable HTTPS on the proxy",
+            "steps": [
+              "Point nginx/Caddy at deploy/certs; redirect HTTP→HTTPS",
+              "curl -v https://api.squadforge.local/healthz | tee docs/api/curl-tls.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add scripts/gen-lab-certs.sh deploy/certs docs/network/tls-scope.md docs/api/curl-tls.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Route lab VMs so game hosts are not public by accident.",
+        "outcome": "Routing evidence + NAT intent written.",
+        "tasks": [
+          {
+            "id": "capture",
+            "title": "Capture routes",
+            "steps": [
+              "On game-host VM: `ip route` → `docs/network/routes-before.txt`"
+            ]
+          },
+          {
+            "id": "intent",
+            "title": "Write NAT / exposure intent",
+            "steps": [
+              "Create `docs/network/nat-intent.md`: players only hit published game port; management via bastion; no public default for SSH"
+            ]
+          },
+          {
+            "id": "after",
+            "title": "Apply intended route/NAT (lab) and re-capture",
+            "steps": [
+              "Make the smallest change that matches intent (or dry-run)",
+              "`ip route` → `docs/network/routes-after.txt`"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network/routes-before.txt docs/network/routes-after.txt docs/network/nat-intent.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Firewall default deny; open only API and required game ports.",
+        "outcome": "Rules file applied and verified.",
+        "tasks": [
+          {
+            "id": "write-rules",
+            "title": "Author rules file",
+            "steps": [
+              "mkdir -p deploy/firewall",
+              "Create `deploy/firewall/forge-lab.ufw.md` listing: default deny incoming; allow 22 from bastion CIDR; allow 443 to API; allow one game port"
+            ]
+          },
+          {
+            "id": "apply",
+            "title": "Apply on lab VM",
+            "steps": [
+              "Apply with ufw or nftables using your notes",
+              "Save `sudo ufw status verbose` or `nft list ruleset` to `docs/network/firewall.txt`"
+            ]
+          },
+          {
+            "id": "test",
+            "title": "Test blocked vs allowed",
+            "steps": [
+              "From a non-bastion IP/path show SSH blocked (or document expected block)",
+              "Show curl to API port succeeds; save notes under ## Tests in firewall.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/firewall docs/network/firewall.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "ALB-like reverse proxy with upstream health checks.",
+        "outcome": "Bad upstream skipped; curl loop evidence.",
+        "tasks": [
+          {
+            "id": "two-upstreams",
+            "title": "Configure two upstreams",
+            "steps": [
+              "Update nginx upstream with server A (good) and server B (dead port)",
+              "Enable health checks or max_fails=1 fail_timeout=10s"
+            ]
+          },
+          {
+            "id": "prove",
+            "title": "Prove failover behaviour",
+            "steps": [
+              "Loop curl 20 times; save to `docs/api/lb-health.txt`",
+              "Annotate that requests still succeed when B is down"
+            ]
+          },
+          {
+            "id": "alb-notes",
+            "title": "Map to future ALB",
+            "steps": [
+              "Add `docs/api/alb-notes.md`: target group health = /healthz; unhealthy threshold"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/api/lb-health.txt docs/api/alb-notes.md deploy/compose/edge",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "tcpdump a join attempt; describe unreachable on the wire.",
+        "outcome": "Capture + written analysis of failure modes.",
+        "tasks": [
+          {
+            "id": "capture",
+            "title": "Capture traffic",
+            "steps": [
+              "In one terminal: `sudo tcpdump -ni any port 443 or port 25565 -c 80 -w /tmp/join.pcap`",
+              "In another: attempt curl/connect to API or game port",
+              "Also save text form: `sudo tcpdump -ni any port 443 -c 40 | tee docs/network/join-tcpdump.txt`"
+            ]
+          },
+          {
+            "id": "analyse",
+            "title": "Write unreachable analysis",
+            "steps": [
+              "Create `docs/network/unreachable.md` with sections: DNS failure, SYN no SYN-ACK, TLS alert, HTTP 502",
+              "Paste one example from your capture into each section you can demonstrate"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/network/join-tcpdump.txt docs/network/unreachable.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Operator VPN/bastion access runbook.",
+        "outcome": "ProxyJump or WireGuard steps that work on your lab.",
+        "tasks": [
+          {
+            "id": "ssh-config",
+            "title": "Write SSH config Host blocks",
+            "steps": [
+              "Create `docs/bastion.md` with exact `Host forge-bastion` and `Host forge-game` ProxyJump examples"
+            ]
+          },
+          {
+            "id": "prove-jump",
+            "title": "Prove jump access",
+            "steps": [
+              "SSH to a private VM only via bastion; paste success commands into bastion.md"
+            ]
+          },
+          {
+            "id": "wireguard-optional",
+            "title": "Optional WireGuard paragraph",
+            "steps": [
+              "Either add a WireGuard peer example or write \"deferred — SSH ProxyJump is enough for lab\""
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/bastion.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev103": [
+      {
+        "summary": "Init Git layout and collaboration files for the Forge monorepo.",
+        "outcome": "Layout verified; PR template + conventional commits documented.",
+        "tasks": [
+          {
+            "id": "verify-dirs",
+            "title": "Verify monorepo directories",
+            "steps": [
+              "From repo root confirm: cmd/api cmd/orchestrator cmd/forgectl deploy games docs exist (`ls`)",
+              "Create any missing ones with mkdir -p"
+            ]
+          },
+          {
+            "id": "gitignore",
+            "title": "Add .gitignore",
+            "steps": [
+              "Create `.gitignore` ignoring: bin/, dist/, .env, *.exe, .idea/, .vscode/, coverage/"
+            ]
+          },
+          {
+            "id": "pr-template",
+            "title": "Add PR template + CONTRIBUTING",
+            "steps": [
+              "mkdir -p .github && create `.github/pull_request_template.md` with checklist: tests, docs, SquadForge impact",
+              "Create `CONTRIBUTING.md` requiring conventional commits (feat/fix/docs)"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add .gitignore .github CONTRIBUTING.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Trunk-based flow: protect main; plan first release tag.",
+        "outcome": "Branching rules + CHANGELOG Unreleased section exist.",
+        "tasks": [
+          {
+            "id": "branch-rules",
+            "title": "Document trunk rules",
+            "steps": [
+              "In CONTRIBUTING.md add: short-lived branches, PR required, no direct push to main"
+            ]
+          },
+          {
+            "id": "changelog",
+            "title": "Create CHANGELOG",
+            "steps": [
+              "Create `CHANGELOG.md` with ## Unreleased and a note that v0.1.0 tags Compose MVP"
+            ]
+          },
+          {
+            "id": "tag-plan",
+            "title": "Write release checklist",
+            "steps": [
+              "Create `docs/release-checklist.md`: tests green, compose up, tag v0.1.0, push tags"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add CONTRIBUTING.md CHANGELOG.md docs/release-checklist.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Initialize Go module; keep Python out of the hot path.",
+        "outcome": "go.mod exists; forgectl prints version; language boundary documented.",
+        "tasks": [
+          {
+            "id": "gomod",
+            "title": "go mod init",
+            "steps": [
+              "From repo root: `go mod init github.com/<you>/squadforge` (replace <you>)",
+              "Confirm `go.mod` exists"
+            ]
+          },
+          {
+            "id": "forgectl-stub",
+            "title": "Stub forgectl main",
+            "steps": [
+              "Create `cmd/forgectl/main.go` with package main; prints `forgectl 0.0.1` and exits 0",
+              "Run `go run ./cmd/forgectl` and confirm output"
+            ]
+          },
+          {
+            "id": "boundary",
+            "title": "Document language boundary",
+            "steps": [
+              "Create `docs/language-boundary.md`: Go = API/orchestrator/CLI; Python = optional ops glue only"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add go.mod cmd/forgectl docs/language-boundary.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Optional Python glue only — not in the hot path.",
+        "outcome": "scripts/optional exists with README; either a stub script or explicit skip.",
+        "tasks": [
+          {
+            "id": "optional-dir",
+            "title": "Create scripts/optional",
+            "steps": [
+              "mkdir -p scripts/optional",
+              "Write `scripts/optional/README.md` explaining these scripts are never required to start a game server"
+            ]
+          },
+          {
+            "id": "glue-or-skip",
+            "title": "Add stub or skip",
+            "steps": [
+              "Either create `scripts/optional/list_s3_stub.py` with argparse --help, or write SKIPPED.md with reason"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add scripts/optional",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Placeholder world tarball for later S3 backups.",
+        "outcome": "demo-world.tgz exists; upload documented or explicitly local-only.",
+        "tasks": [
+          {
+            "id": "world",
+            "title": "Create placeholder world",
+            "steps": [
+              "mkdir -p games/worlds",
+              "echo \"demo world\" > games/worlds/README.txt",
+              "tar czf games/worlds/demo-world.tgz -C games/worlds README.txt"
+            ]
+          },
+          {
+            "id": "s3-note",
+            "title": "Document S3 target",
+            "steps": [
+              "Create `docs/aws/world-backups.md` with intended bucket prefix s3://…/worlds/ (or LOCAL ONLY)"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add games/worlds docs/aws/world-backups.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "First automated tests for Go (and pytest only if Python glue exists).",
+        "outcome": "go test ./... passes.",
+        "tasks": [
+          {
+            "id": "version-pkg",
+            "title": "Add internal/version",
+            "steps": [
+              "Create `internal/version/version.go` with const Version = \"0.0.1\"",
+              "Create `internal/version/version_test.go` asserting Version non-empty"
+            ]
+          },
+          {
+            "id": "run-tests",
+            "title": "Run Go tests",
+            "steps": [
+              "`go test ./...` must pass",
+              "Save output to `docs/dev/go-test.txt`"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add internal/version docs/dev/go-test.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "forgectl commands: version, login stub, servers list/start/stop.",
+        "outcome": "Each subcommand has --help; start/stop work against an in-memory map.",
+        "tasks": [
+          {
+            "id": "cli-structure",
+            "title": "Structure CLI commands",
+            "steps": [
+              "Implement subcommands in cmd/forgectl (cobra or std flag): version, login, servers list, servers start, servers stop",
+              "login writes a stub token to `~/.config/squadforge/credentials`"
+            ]
+          },
+          {
+            "id": "memory-store",
+            "title": "In-memory server map",
+            "steps": [
+              "start --game minecraft adds an ID; list prints it; stop --id removes it",
+              "No Docker required this task"
+            ]
+          },
+          {
+            "id": "readme-cli",
+            "title": "Document CLI usage",
+            "steps": [
+              "Add ## forgectl section to README with example commands"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add cmd/forgectl README.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Go API with health/ready/metrics and /v1/servers CRUD stub.",
+        "outcome": "API on :8080; smoke script passes.",
+        "tasks": [
+          {
+            "id": "api-main",
+            "title": "Create cmd/api/main.go",
+            "steps": [
+              "Listen :8080; GET /healthz 200; GET /readyz 200; GET /metrics Prometheus text with a counter",
+              "JSON CRUD under /v1/servers using an in-memory map",
+              "Log each request as one JSON line with request_id"
+            ]
+          },
+          {
+            "id": "smoke",
+            "title": "Write smoke script",
+            "steps": [
+              "Create `scripts/smoke-api.sh` that creates, lists, stops a server via curl",
+              "chmod +x; run against local API; tee docs/api/smoke.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add cmd/api scripts/smoke-api.sh docs/api/smoke.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Dockerize API + orchestrator stub; Compose with postgres, redis, gamesvc.",
+        "outcome": "docker compose ps shows healthy services.",
+        "tasks": [
+          {
+            "id": "dockerfiles",
+            "title": "Multi-stage Dockerfiles",
+            "steps": [
+              "Create `deploy/docker/Dockerfile.api` multi-stage non-root exposing 8080",
+              "Create stub `cmd/orchestrator/main.go` logging reconcile every 5s + Dockerfile.orchestrator"
+            ]
+          },
+          {
+            "id": "compose",
+            "title": "Write compose file",
+            "steps": [
+              "Create `deploy/compose/docker-compose.yml` with api, orchestrator, postgres, redis, gamesvc",
+              "Use a small public game image OR nginx placeholder; document choice in a comment",
+              "Only publish API to localhost"
+            ]
+          },
+          {
+            "id": "up",
+            "title": "Bring the stack up",
+            "steps": [
+              "`docker compose -f deploy/compose/docker-compose.yml up -d --build`",
+              "`docker compose … ps | tee docs/compose-ps.txt`"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/docker deploy/compose cmd/orchestrator docs/compose-ps.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Harden images: non-root, scan, document local platform.",
+        "outcome": "Scan summary committed; accepted risks listed.",
+        "tasks": [
+          {
+            "id": "scan",
+            "title": "Scan API image",
+            "steps": [
+              "Build the API image; run Trivy or docker scout",
+              "Save summary to `docs/security/trivy-api.txt`"
+            ]
+          },
+          {
+            "id": "fix-or-accept",
+            "title": "Fix or accept Criticals",
+            "steps": [
+              "Fix what you can; list accepted risks with rationale in the same file"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/security/trivy-api.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Restart policies + healthchecks so a crashed game container returns.",
+        "outcome": "Kill gamesvc once; it returns; PID1 notes written.",
+        "tasks": [
+          {
+            "id": "healthcheck",
+            "title": "Add Compose healthcheck + restart",
+            "steps": [
+              "On gamesvc: healthcheck + restart: unless-stopped",
+              "Recreate the service"
+            ]
+          },
+          {
+            "id": "kill-prove",
+            "title": "Kill and prove restart",
+            "steps": [
+              "docker kill the gamesvc container; wait; show it running again",
+              "Save evidence to `docs/compose-restart.txt`"
+            ]
+          },
+          {
+            "id": "pid1",
+            "title": "Document PID 1 / signals",
+            "steps": [
+              "Write `docs/containers/pid1.md`: why PID1 matters for game servers"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/compose docs/compose-restart.txt docs/containers/pid1.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev104": [
+      {
+        "summary": "AWS account hygiene for SquadForge.",
+        "outcome": "MFA on; billing alarm; region chosen with latency note.",
+        "tasks": [
+          {
+            "id": "mfa",
+            "title": "Enable MFA on the ops user/root as required by your account policy",
+            "steps": [
+              "Sign in to AWS console IAM; enable MFA",
+              "Record completion date in docs/aws/account.md"
+            ]
+          },
+          {
+            "id": "billing",
+            "title": "Create billing alarm",
+            "steps": [
+              "Create SNS email topic; CloudWatch billing alarm estimated charges > USD 20",
+              "Confirm subscription email"
+            ]
+          },
+          {
+            "id": "region",
+            "title": "Pick home region",
+            "steps": [
+              "Write docs/aws/account.md with region + player-latency rationale"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/account.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "IAM roles for future orchestrator (IRSA mindset).",
+        "outcome": "Least-privilege policy JSON + rationale committed.",
+        "tasks": [
+          {
+            "id": "policy",
+            "title": "Draft policy JSON",
+            "steps": [
+              "mkdir -p deploy/aws/iam",
+              "Create orchestrator-policy.json allowing only needed ECR/S3 prefix/SQS/describe actions"
+            ]
+          },
+          {
+            "id": "rationale",
+            "title": "Explain each statement",
+            "steps": [
+              "Write docs/aws/iam.md with a bullet per statement"
+            ]
+          },
+          {
+            "id": "validate",
+            "title": "Validate JSON",
+            "steps": [
+              "python -m json.tool deploy/aws/iam/orchestrator-policy.json"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/aws/iam docs/aws/iam.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Design/build SquadForge 3-tier VPC.",
+        "outcome": "Diagram + rebuild/teardown notes for A1.",
+        "tasks": [
+          {
+            "id": "diagram",
+            "title": "Draw VPC diagram",
+            "steps": [
+              "Create docs/aws/vpc.md with public/private/db and game-port SG notes"
+            ]
+          },
+          {
+            "id": "build",
+            "title": "Build or stage VPC",
+            "steps": [
+              "Follow assignment: ALB, private app ASG/stub, RDS subnets, NAT, SSM only",
+              "Keep CLI commands in docs/aws/vpc-cli.md"
+            ]
+          },
+          {
+            "id": "teardown",
+            "title": "Write teardown script notes",
+            "steps": [
+              "Document destroy order so you do not leave NAT Gateway costs"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "ASG/node strategy for game hosts before EKS.",
+        "outcome": "user-data sketch + density guess committed.",
+        "tasks": [
+          {
+            "id": "userdata",
+            "title": "Write user-data script",
+            "steps": [
+              "mkdir -p deploy/aws/userdata",
+              "Create game-node.sh installing docker (or containerd) and writing /etc/squadforge/node.env"
+            ]
+          },
+          {
+            "id": "density",
+            "title": "Estimate density",
+            "steps": [
+              "In docs/aws/nodes.md guess instances needed for 50 concurrent servers"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/aws/userdata docs/aws/nodes.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "ALB + DNS for API; NLB notes for game ports.",
+        "outcome": "edge.md describes ALB health and game LB trade-offs.",
+        "tasks": [
+          {
+            "id": "edge",
+            "title": "Write edge design",
+            "steps": [
+              "Create docs/aws/edge.md: ALB→API /healthz; Route 53 api record; when to use NLB for games"
+            ]
+          },
+          {
+            "id": "health",
+            "title": "Define health check",
+            "steps": [
+              "Document healthy threshold and path exactly"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/edge.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "S3 for world backups.",
+        "outcome": "Bucket settings documented (BPA, versioning, lifecycle).",
+        "tasks": [
+          {
+            "id": "bucket",
+            "title": "Create or specify bucket",
+            "steps": [
+              "Create private bucket or document name",
+              "Enable Block Public Access + versioning"
+            ]
+          },
+          {
+            "id": "lifecycle",
+            "title": "Lifecycle rule",
+            "steps": [
+              "IA after 30 days; document in docs/aws/s3-worlds.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/s3-worlds.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "RDS Postgres + Redis/SQS sizing for Forge.",
+        "outcome": "data-stores.md with lab vs prod sizes.",
+        "tasks": [
+          {
+            "id": "rds",
+            "title": "Specify Postgres",
+            "steps": [
+              "docs/aws/data-stores.md section RDS: instance class, multi-AZ later, DB name forge"
+            ]
+          },
+          {
+            "id": "queue",
+            "title": "Specify Redis or SQS",
+            "steps": [
+              "Section for job queue choice and why"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/data-stores.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "ECR repos for api, orchestrator, game images.",
+        "outcome": "Repos listed with lifecycle keep-last-10.",
+        "tasks": [
+          {
+            "id": "repos",
+            "title": "Create ECR repos",
+            "steps": [
+              "Create squadforge-api, squadforge-orchestrator, squadforge-game-minecraft (or document)"
+            ]
+          },
+          {
+            "id": "lifecycle",
+            "title": "Lifecycle policy note",
+            "steps": [
+              "docs/aws/ecr.md keep last 10 images"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/ecr.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "CloudWatch alarm stubs for API 5xx and node CPU.",
+        "outcome": "Alarm spec ready to implement in console or Terraform.",
+        "tasks": [
+          {
+            "id": "alarms",
+            "title": "Write alarm specs",
+            "steps": [
+              "deploy/aws/cloudwatch/alarms.md with metric, threshold, action for 5xx and CPU"
+            ]
+          },
+          {
+            "id": "actions",
+            "title": "Define actions",
+            "steps": [
+              "SNS to your email/phone for both"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/aws/cloudwatch",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Secrets and encryption plan — nothing secret in git.",
+        "outcome": ".env.example + secrets.md; no real secrets committed.",
+        "tasks": [
+          {
+            "id": "env-example",
+            "title": "Add .env.example",
+            "steps": [
+              "Placeholders only for DB URL, Redis URL, API token"
+            ]
+          },
+          {
+            "id": "secrets-doc",
+            "title": "Write secrets.md",
+            "steps": [
+              "docs/aws/secrets.md: Secrets Manager for DB; never commit .env"
+            ]
+          },
+          {
+            "id": "scan-git",
+            "title": "Check git history for accidents",
+            "steps": [
+              "git grep -i password || true; fix if needed"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add .env.example docs/aws/secrets.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Architecture + Friday-night cost review against YOUR Forge.",
+        "outcome": "architecture.md + cost estimate committed.",
+        "tasks": [
+          {
+            "id": "arch",
+            "title": "Architecture one-pager",
+            "steps": [
+              "docs/aws/architecture.md with diagram + 5 SAA topics mapped to Forge"
+            ]
+          },
+          {
+            "id": "cost",
+            "title": "Cost estimate",
+            "steps": [
+              "docs/aws/cost-friday-night.md for 50 concurrent servers"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/aws/architecture.md docs/aws/cost-friday-night.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev201": [
+      {
+        "summary": "kind cluster + squadforge-dev namespace.",
+        "outcome": "kubectl get ns shows squadforge-dev.",
+        "tasks": [
+          {
+            "id": "kind",
+            "title": "Create kind cluster",
+            "steps": [
+              "kind create cluster --name squadforge",
+              "kubectl cluster-info"
+            ]
+          },
+          {
+            "id": "ns",
+            "title": "Create namespace",
+            "steps": [
+              "kubectl create namespace squadforge-dev",
+              "kubectl get ns | tee docs/k8s/kind.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/k8s/kind.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Deploy API + orchestrator with requests/limits.",
+        "outcome": "Pods Running in squadforge-dev.",
+        "tasks": [
+          {
+            "id": "manifests",
+            "title": "Write Deployments",
+            "steps": [
+              "mkdir -p deploy/k8s",
+              "Create api-deploy.yaml and orchestrator-deploy.yaml with resources.requests/limits"
+            ]
+          },
+          {
+            "id": "apply",
+            "title": "Apply and wait",
+            "steps": [
+              "kubectl -n squadforge-dev apply -f deploy/k8s/",
+              "kubectl -n squadforge-dev get pods -o wide | tee docs/k8s/pods.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/pods.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Service for API; document join publishing.",
+        "outcome": "port-forward curl /healthz works; join doc written.",
+        "tasks": [
+          {
+            "id": "svc",
+            "title": "Create Service",
+            "steps": [
+              "Service manifest for API ClusterIP",
+              "kubectl apply"
+            ]
+          },
+          {
+            "id": "pf",
+            "title": "Port-forward smoke",
+            "steps": [
+              "kubectl -n squadforge-dev port-forward svc/api 8080:8080",
+              "curl -s localhost:8080/healthz | tee docs/k8s/healthz.txt"
+            ]
+          },
+          {
+            "id": "join-doc",
+            "title": "Join publishing notes",
+            "steps": [
+              "docs/k8s/join-publishing.md NodePort vs LB for game ports"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "ConfigMaps/Secrets for presets — no passwords in images.",
+        "outcome": "ConfigMap + Secret mounted.",
+        "tasks": [
+          {
+            "id": "cm",
+            "title": "Game presets ConfigMap",
+            "steps": [
+              "kubectl create configmap game-presets --from-literal=minecraft.json='{\"slots\":2}' -n squadforge-dev (or YAML)"
+            ]
+          },
+          {
+            "id": "secret",
+            "title": "DB Secret",
+            "steps": [
+              "Create secret forge-db with dummy DSN; mount into API deployment"
+            ]
+          },
+          {
+            "id": "verify",
+            "title": "Verify mounts",
+            "steps": [
+              "kubectl -n squadforge-dev describe pod -l app=api | tee docs/k8s/mounts.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/mounts.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Ingress for API on kind.",
+        "outcome": "curl via ingress host works.",
+        "tasks": [
+          {
+            "id": "ingress-ctrl",
+            "title": "Install ingress-nginx on kind if needed",
+            "steps": [
+              "Follow kind ingress docs; wait for controller Ready"
+            ]
+          },
+          {
+            "id": "ingress",
+            "title": "Create Ingress",
+            "steps": [
+              "Ingress api.squadforge.local → svc/api",
+              "Apply; curl with Host header; save docs/k8s/ingress.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/ingress.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Probes + HPA on API; PDB intent for orchestrator.",
+        "outcome": "HPA object exists; probes on API.",
+        "tasks": [
+          {
+            "id": "probes",
+            "title": "Add probes",
+            "steps": [
+              "liveness/readiness HTTP /healthz /readyz on API container"
+            ]
+          },
+          {
+            "id": "hpa",
+            "title": "Create HPA",
+            "steps": [
+              "kubectl autoscale deploy api --cpu-percent=70 --min=1 --max=3 -n squadforge-dev (or YAML)"
+            ]
+          },
+          {
+            "id": "pdb",
+            "title": "PDB notes",
+            "steps": [
+              "docs/k8s/pdb.md for orchestrator"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/pdb.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "NetworkPolicies isolate tenants.",
+        "outcome": "default-deny + allow API→orchestrator applied.",
+        "tasks": [
+          {
+            "id": "deny",
+            "title": "Default deny",
+            "steps": [
+              "NetworkPolicy default-deny-all in squadforge-dev"
+            ]
+          },
+          {
+            "id": "allow",
+            "title": "Allow needed flows",
+            "steps": [
+              "Allow API→orchestrator; DNS; document game isolation test"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "PVC for worlds + backup CronJob sketch.",
+        "outcome": "PVC bound; CronJob YAML present.",
+        "tasks": [
+          {
+            "id": "pvc",
+            "title": "Create PVC",
+            "steps": [
+              "PVC worlds-pvc; mount in a stub pod at /worlds"
+            ]
+          },
+          {
+            "id": "cron",
+            "title": "Backup CronJob sketch",
+            "steps": [
+              "CronJob that echoes backup (S3 real later)"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "RBAC for orchestrator ServiceAccount.",
+        "outcome": "kubectl auth can-i proves least privilege.",
+        "tasks": [
+          {
+            "id": "sa",
+            "title": "ServiceAccount + Role",
+            "steps": [
+              "SA orchestrator; Role get/list/watch/create/delete pods,services in namespace"
+            ]
+          },
+          {
+            "id": "bind",
+            "title": "RoleBinding + can-i",
+            "steps": [
+              "Bind; kubectl auth can-i create pods --as=system:serviceaccount:squadforge-dev:orchestrator -n squadforge-dev | tee docs/k8s/rbac.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/rbac.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Kustomize or Helm package for one-command deploy.",
+        "outcome": "Documented one-liner upgrades control plane.",
+        "tasks": [
+          {
+            "id": "package",
+            "title": "Add overlay/chart",
+            "steps": [
+              "deploy/k8s/overlays/dev or chart/ with values"
+            ]
+          },
+          {
+            "id": "doc",
+            "title": "Document apply",
+            "steps": [
+              "docs/k8s/package.md with exact kubectl apply -k or helm upgrade --install"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/k8s docs/k8s/package.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "EKS migration checklist; mesh optional.",
+        "outcome": "eks-path.md complete; mesh does not block.",
+        "tasks": [
+          {
+            "id": "eks",
+            "title": "Write EKS path",
+            "steps": [
+              "docs/k8s/eks-path.md: IRSA, LB controller, node groups, manifest migration"
+            ]
+          },
+          {
+            "id": "mesh",
+            "title": "Optional mesh note",
+            "steps": [
+              "One paragraph: Linkerd/Istio on API only — OPTIONAL"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/k8s/eks-path.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev202": [
+      {
+        "summary": "Terraform layout + backend for Forge.",
+        "outcome": "terraform init succeeds.",
+        "tasks": [
+          {
+            "id": "layout",
+            "title": "Create deploy/terraform",
+            "steps": [
+              "versions.tf providers.tf backend.tf (S3+lock or local)"
+            ]
+          },
+          {
+            "id": "init",
+            "title": "terraform init",
+            "steps": [
+              "Run init; tee docs/terraform/init.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform docs/terraform/init.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "VPC module from your CIDR table.",
+        "outcome": "Module with outputs vpc_id and subnet ids.",
+        "tasks": [
+          {
+            "id": "module",
+            "title": "Write modules/vpc",
+            "steps": [
+              "subnets matching docs/network/cidr-table.md"
+            ]
+          },
+          {
+            "id": "root",
+            "title": "Call module from root",
+            "steps": [
+              "outputs.tf for vpc_id subnet ids"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "IAM + IRSA for orchestrator.",
+        "outcome": "IRSA role resource in Terraform.",
+        "tasks": [
+          {
+            "id": "irsa",
+            "title": "Add IRSA resources",
+            "steps": [
+              "IAM role trust for Forge SA; attach policy"
+            ]
+          },
+          {
+            "id": "doc",
+            "title": "Document SA annotation",
+            "steps": [
+              "docs/terraform/irsa.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform docs/terraform/irsa.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Module quality: variables, validation, README.",
+        "outcome": "Validation blocks + module README.",
+        "tasks": [
+          {
+            "id": "vars",
+            "title": "Add validation",
+            "steps": [
+              "variables with validation blocks for CIDRs"
+            ]
+          },
+          {
+            "id": "readme",
+            "title": "Module README",
+            "steps": [
+              "inputs/outputs table"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Lifecycle / destroy order for EKS-related resources.",
+        "outcome": "destroy-order.md written.",
+        "tasks": [
+          {
+            "id": "order",
+            "title": "Document destroy order",
+            "steps": [
+              "docs/terraform/destroy-order.md listing what to destroy first"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/terraform/destroy-order.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "dev/staging/prod tfvars.",
+        "outcome": "Three env files with different CIDRs/sizes.",
+        "tasks": [
+          {
+            "id": "tfvars",
+            "title": "Create env tfvars",
+            "steps": [
+              "env/dev.tfvars staging.tfvars prod.tfvars"
+            ]
+          },
+          {
+            "id": "how",
+            "title": "Document select env",
+            "steps": [
+              "docs/terraform/envs.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform docs/terraform/envs.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "tflint + Checkov (or equivalent) once.",
+        "outcome": "Lint summaries saved.",
+        "tasks": [
+          {
+            "id": "lint",
+            "title": "Run linters",
+            "steps": [
+              "tflint and Checkov; tee docs/terraform/lint.txt"
+            ]
+          },
+          {
+            "id": "fix",
+            "title": "Fix blockers",
+            "steps": [
+              "Fix errors you can; note accepts"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/terraform/lint.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Plan-in-CI mindset; no laptop apply to prod.",
+        "outcome": "Plan script/workflow + CONTRIBUTING rule.",
+        "tasks": [
+          {
+            "id": "script",
+            "title": "scripts/tf-plan.sh",
+            "steps": [
+              "Runs terraform plan for dev"
+            ]
+          },
+          {
+            "id": "rule",
+            "title": "Update CONTRIBUTING",
+            "steps": [
+              "Forbid prod apply from laptop"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add scripts/tf-plan.sh CONTRIBUTING.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Optional Ansible for bastion only.",
+        "outcome": "Role or explicit SKIPPED; Terraform remains SoT.",
+        "tasks": [
+          {
+            "id": "ansible",
+            "title": "Bastion role or skip",
+            "steps": [
+              "ansible/bastion.yml OR docs/ansible-skip.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add ansible docs/ansible-skip.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "EKS module + node group density.",
+        "outcome": "EKS terraform sketched; density assumption written.",
+        "tasks": [
+          {
+            "id": "eks",
+            "title": "Add EKS resources/module",
+            "steps": [
+              "cluster + node group"
+            ]
+          },
+          {
+            "id": "density",
+            "title": "Document density",
+            "steps": [
+              "docs/terraform/eks-density.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/terraform docs/terraform/eks-density.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Destroy/rebuild drill in dev.",
+        "outcome": "Timed rebuild notes committed.",
+        "tasks": [
+          {
+            "id": "drill",
+            "title": "Destroy and rebuild dev",
+            "steps": [
+              "Record wall-clock time and issues in docs/terraform/rebuild.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/terraform/rebuild.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev203": [
+      {
+        "summary": "Map CI/CD concepts to SquadForge delivery.",
+        "outcome": "overview.md diagram of PR→prod.",
+        "tasks": [
+          {
+            "id": "diagram",
+            "title": "Write delivery overview",
+            "steps": [
+              "docs/delivery/overview.md with happy path"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/delivery/overview.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "GitHub Actions test + build on PR.",
+        "outcome": "ci.yml runs go test and docker build.",
+        "tasks": [
+          {
+            "id": "workflow",
+            "title": "Create ci.yml",
+            "steps": [
+              ".github/workflows/ci.yml: setup-go, go test, docker build api"
+            ]
+          },
+          {
+            "id": "trigger",
+            "title": "Open a PR or workflow_dispatch to prove",
+            "steps": [
+              "Save run URL in docs/delivery/ci-run.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add .github/workflows/ci.yml docs/delivery/ci-run.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Jenkins parity or skip-with-reason.",
+        "outcome": "Jenkinsfile or skip doc.",
+        "tasks": [
+          {
+            "id": "jenkins",
+            "title": "Jenkinsfile or skip",
+            "steps": [
+              "Jenkinsfile with same stages OR docs/delivery/jenkins-skip.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add Jenkinsfile docs/delivery/jenkins-skip.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Scan + push ECR via OIDC.",
+        "outcome": "Trivy gate + OIDC notes in workflow/docs.",
+        "tasks": [
+          {
+            "id": "trivy",
+            "title": "Add Trivy step",
+            "steps": [
+              "Fail on CRITICAL"
+            ]
+          },
+          {
+            "id": "oidc",
+            "title": "Document OIDC role",
+            "steps": [
+              "docs/delivery/ecr-oidc.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add .github/workflows docs/delivery/ecr-oidc.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Versioning scheme for Forge + game packs.",
+        "outcome": "semver doc committed.",
+        "tasks": [
+          {
+            "id": "semver",
+            "title": "Write versioning doc",
+            "steps": [
+              "docs/delivery/versioning.md: api/orchestrator semver; game packs separate"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/delivery/versioning.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Deploy strategy ADR for control plane.",
+        "outcome": "ADR chooses canary for API.",
+        "tasks": [
+          {
+            "id": "adr",
+            "title": "Write ADR",
+            "steps": [
+              "docs/adr/00X-control-plane-deploy.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/adr",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Argo CD application for SquadForge.",
+        "outcome": "application YAML + sync notes.",
+        "tasks": [
+          {
+            "id": "app",
+            "title": "GitOps application manifest",
+            "steps": [
+              "deploy/gitops/application-squadforge.yaml"
+            ]
+          },
+          {
+            "id": "doc",
+            "title": "Sync notes",
+            "steps": [
+              "docs/delivery/argocd.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/gitops docs/delivery/argocd.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Canary / progressive delivery for API.",
+        "outcome": "Rollouts (or substitute) defined.",
+        "tasks": [
+          {
+            "id": "canary",
+            "title": "Add canary manifests",
+            "steps": [
+              "Argo Rollouts Analysis on 5xx OR documented nginx canary"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/gitops",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Game catalog image updates via PR.",
+        "outcome": "catalog pipeline documented.",
+        "tasks": [
+          {
+            "id": "catalog",
+            "title": "Document catalog flow",
+            "steps": [
+              "games/catalog.yaml version bump → cluster",
+              "docs/delivery/game-catalog.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add games/catalog.yaml docs/delivery/game-catalog.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "SECURITY.md supply-chain checklist.",
+        "outcome": "SECURITY.md matches CI gates.",
+        "tasks": [
+          {
+            "id": "sec",
+            "title": "Write SECURITY.md",
+            "steps": [
+              "signing, SBOM, secret scanning, Trivy"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add SECURITY.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "E2E staging smoke: start → health → stop.",
+        "outcome": "e2e script output saved.",
+        "tasks": [
+          {
+            "id": "script",
+            "title": "Write e2e script",
+            "steps": [
+              "scripts/e2e-staging.sh using forgectl/curl"
+            ]
+          },
+          {
+            "id": "run",
+            "title": "Run and save",
+            "steps": [
+              "tee docs/delivery/e2e-staging.txt"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add scripts/e2e-staging.sh docs/delivery/e2e-staging.txt",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev204": [
+      {
+        "summary": "SLO ADR for SquadForge.",
+        "outcome": "Three SLOs + error budget policy written.",
+        "tasks": [
+          {
+            "id": "adr",
+            "title": "Write SLO ADR",
+            "steps": [
+              "docs/adr/0YY-squadforge-slos.md: API availability, time-to-join, crash budget"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/adr",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Prometheus metrics on API/orchestrator.",
+        "outcome": "Metric names documented and scraped.",
+        "tasks": [
+          {
+            "id": "emit",
+            "title": "Emit latency + counters",
+            "steps": [
+              "Ensure /metrics has request latency and servers_started_total"
+            ]
+          },
+          {
+            "id": "doc",
+            "title": "List metrics",
+            "steps": [
+              "docs/observability/metrics.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/observability/metrics.md cmd/api",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Grafana dashboard time-to-join.",
+        "outcome": "Dashboard JSON in repo.",
+        "tasks": [
+          {
+            "id": "dash",
+            "title": "Export dashboard",
+            "steps": [
+              "deploy/observability/grafana-time-to-join.json"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/observability",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Logs/traces labels for failed starts.",
+        "outcome": "Query recipe for a failed start committed.",
+        "tasks": [
+          {
+            "id": "labels",
+            "title": "Define labels",
+            "steps": [
+              "docs/observability/logs.md: namespace, session_id, clan_id"
+            ]
+          },
+          {
+            "id": "query",
+            "title": "Write example query",
+            "steps": [
+              "How to find a failed start in 2 minutes"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/observability/logs.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Alert rules for start failures, crash loops, disk full.",
+        "outcome": "alerts.yaml + routing notes.",
+        "tasks": [
+          {
+            "id": "rules",
+            "title": "Write alert rules",
+            "steps": [
+              "deploy/observability/alerts.yaml"
+            ]
+          },
+          {
+            "id": "route",
+            "title": "Route to phone",
+            "steps": [
+              "Document receiver in docs/observability/alerting.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add deploy/observability docs/observability/alerting.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Three Forge runbooks with exact commands.",
+        "outcome": "server-wont-start, node-pressure, image-pull-backoff.",
+        "tasks": [
+          {
+            "id": "rb1",
+            "title": "Runbook server-wont-start",
+            "steps": [
+              "docs/runbooks/server-wont-start.md with kubectl/aws commands"
+            ]
+          },
+          {
+            "id": "rb2",
+            "title": "Runbook node-pressure",
+            "steps": [
+              "docs/runbooks/node-pressure.md"
+            ]
+          },
+          {
+            "id": "rb3",
+            "title": "Runbook image-pull-backoff",
+            "steps": [
+              "docs/runbooks/image-pull-backoff.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/runbooks",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Inject a fault; write a blameless postmortem.",
+        "outcome": "Incident doc using course template.",
+        "tasks": [
+          {
+            "id": "inject",
+            "title": "Inject one fault on staging/lab",
+            "steps": [
+              "Break a probe, image, or config deliberately"
+            ]
+          },
+          {
+            "id": "write",
+            "title": "Write postmortem",
+            "steps": [
+              "docs/incidents/ using template: symptom, timeline, cause, fix, prevention"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/incidents",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "AWS security audit vs Forge IAM/S3/SG.",
+        "outcome": "Ranked remediation list.",
+        "tasks": [
+          {
+            "id": "scan",
+            "title": "Run prowler or manual checklist",
+            "steps": [
+              "Save raw notes"
+            ]
+          },
+          {
+            "id": "rank",
+            "title": "Rank remediations",
+            "steps": [
+              "docs/security/aws-audit.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/security/aws-audit.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Kubernetes security review for Forge namespaces.",
+        "outcome": "k8s-audit.md with SA/Service findings.",
+        "tasks": [
+          {
+            "id": "review",
+            "title": "Review RBAC and Services",
+            "steps": [
+              "docs/security/k8s-audit.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/security/k8s-audit.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Abuse suspend flow + metering export stub.",
+        "outcome": "abuse.md + metering script stub.",
+        "tasks": [
+          {
+            "id": "abuse",
+            "title": "Write abuse flow",
+            "steps": [
+              "docs/ops/abuse.md: report → suspend → kill servers"
+            ]
+          },
+          {
+            "id": "meter",
+            "title": "Metering stub",
+            "steps": [
+              "scripts/metering-export.sh writes CSV hours per clan"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/ops/abuse.md scripts/metering-export.sh",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Game day #1; Kafka optional only if ready.",
+        "outcome": "gameday report committed.",
+        "tasks": [
+          {
+            "id": "run",
+            "title": "Run 3 faults as IC",
+            "steps": [
+              "Keep timeline"
+            ]
+          },
+          {
+            "id": "report",
+            "title": "Write report",
+            "steps": [
+              "docs/gamedays/0001.md; OPTIONAL Kafka deferral paragraph"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/gamedays/0001.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ],
+    "dev301": [
+      {
+        "summary": "One-command bootstrap for SquadForge.",
+        "outcome": "bootstrap.sh + README up/down; reviewer can follow.",
+        "tasks": [
+          {
+            "id": "script",
+            "title": "Write scripts/bootstrap.sh",
+            "steps": [
+              "Brings up kind+Forge or documents terraform apply path"
+            ]
+          },
+          {
+            "id": "readme",
+            "title": "README prerequisites + one command up/down",
+            "steps": [
+              "Update root README"
+            ]
+          },
+          {
+            "id": "review",
+            "title": "Have someone else follow it",
+            "steps": [
+              "Note gaps fixed in docs/bootstrap-feedback.md"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add scripts/bootstrap.sh README.md docs/bootstrap-feedback.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "K8s failure scenarios 1–10 on Forge.",
+        "outcome": "10 postmortems indexed.",
+        "tasks": [
+          {
+            "id": "run",
+            "title": "Execute scenarios 1–10 on Forge path",
+            "steps": [
+              "Use course scenario list"
+            ]
+          },
+          {
+            "id": "write",
+            "title": "Write 10 postmortems + guards",
+            "steps": [
+              "docs/incidents/ + index README"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/incidents",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "AWS/network scenarios 11–20 on join/control path.",
+        "outcome": "10 postmortems.",
+        "tasks": [
+          {
+            "id": "run",
+            "title": "Execute 11–20",
+            "steps": [
+              "Against your VPC/join path"
+            ]
+          },
+          {
+            "id": "write",
+            "title": "Postmortems + guards",
+            "steps": [
+              "Update index"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/incidents",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Terraform/CI scenarios 21–30.",
+        "outcome": "10 postmortems on delivery/IaC.",
+        "tasks": [
+          {
+            "id": "run",
+            "title": "Execute 21–30",
+            "steps": [
+              "Pipeline and terraform faults"
+            ]
+          },
+          {
+            "id": "write",
+            "title": "Postmortems + guards",
+            "steps": [
+              "Update index"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/incidents",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Blind game day + cost review.",
+        "outcome": "Report + cost review committed.",
+        "tasks": [
+          {
+            "id": "blind",
+            "title": "IC 5 unknown faults",
+            "steps": [
+              "4-hour window"
+            ]
+          },
+          {
+            "id": "report",
+            "title": "Write docs/gamedays/blind.md + cost review section",
+            "steps": [
+              "Communications log included"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add docs/gamedays/blind.md",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      },
+      {
+        "summary": "Portfolio: architecture, demo, narrative.",
+        "outcome": "README-led portfolio + ≤3 min demo + narrative.",
+        "tasks": [
+          {
+            "id": "readme",
+            "title": "Polish README with architecture first",
+            "steps": [
+              "Diagram + start→join→stop→invoice story"
+            ]
+          },
+          {
+            "id": "demo",
+            "title": "Record ≤3 min demo",
+            "steps": [
+              "Link in README"
+            ]
+          },
+          {
+            "id": "narrative",
+            "title": "Hire-me narrative",
+            "steps": [
+              "docs/portfolio/narrative.md mapping units → milestones"
+            ]
+          },
+          {
+            "id": "posts",
+            "title": "Three short posts from best postmortems",
+            "steps": [
+              "docs/blog/"
+            ]
+          },
+          {
+            "id": "commit",
+            "title": "Commit evidence to the SquadForge repo",
+            "steps": [
+              "git add README.md docs/portfolio docs/blog",
+              "git commit -m \"docs/feat: SquadForge progress for this week\"",
+              "Push or keep local; paste `git log -1 --oneline` into your lab evidence if required"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -12,11 +12,11 @@ import {
   weekOverview,
 } from '../data/content';
 import { getWeekMedia } from '../data/weekMedia';
-import { squadForgeApply } from '../data/squadforge';
 import { formatWeekRange, weekEnd, weekStart } from '../lib/dates';
 import { isDone, notesAutoComplete, notesConditions } from '../lib/completion';
 import { Breadcrumb, Button, Chip, DoneTick, OverflowMenu } from '../components/ui';
 import { YouTubeEmbed } from '../components/YouTubeEmbed';
+import { ForgeWeekPanel } from '../components/ForgeWeekPanel';
 import { downloadText } from '../storage/backup';
 
 export function NotesView({ unitId, week }: { unitId: string; week: number }) {
@@ -37,7 +37,6 @@ export function NotesView({ unitId, week }: { unitId: string; week: number }) {
   const plan = useMemo(() => studyPlan(w), [w]);
   const overview = weekOverview(w);
   const media = useMemo(() => getWeekMedia(unit.id, idx + 1), [unit.id, idx]);
-  const forge = useMemo(() => squadForgeApply(unit.id, idx + 1), [unit.id, idx]);
   const page = state.page[id] ?? { sec: 0, end: false, ans: questions.map(() => ''), watched: [] };
   const ans = [...questions.map((_, i) => page.ans[i] ?? '')];
   const watched = new Set(page.watched ?? []);
@@ -168,7 +167,10 @@ export function NotesView({ unitId, week }: { unitId: string; week: number }) {
           </ul>
 
           <h2>SquadForge this week</h2>
-          <p>{forge}</p>
+          <p style={{ fontSize: 14 }}>
+            <a href="#/project">Open full SquadForge tracker →</a>
+          </p>
+          <ForgeWeekPanel unitId={unit.id} weekIndex1Based={idx + 1} />
 
           <h2>Study plan</h2>
           <ol>
